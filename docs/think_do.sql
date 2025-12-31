@@ -1,4 +1,4 @@
-CREATE DATABASE think_do IF NOT EXISTS;
+CREATE DATABASE IF NOT EXISTS think_do;
 
 CREATE TABLE tb_user (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '用户ID',
@@ -17,10 +17,11 @@ CREATE TABLE tb_role (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='角色表';
 
 CREATE TABLE tb_user_role (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
     user_id BIGINT NOT NULL COMMENT '用户ID',
     role_id BIGINT NOT NULL COMMENT '角色ID',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '关联创建时间',
-    PRIMARY KEY (user_id, role_id)
+    UNIQUE KEY uk_user_role (user_id, role_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户角色关联表';
 
 CREATE TABLE tb_user_profile (
