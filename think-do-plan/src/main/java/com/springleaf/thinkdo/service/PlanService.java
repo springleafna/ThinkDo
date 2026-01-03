@@ -1,0 +1,55 @@
+package com.springleaf.thinkdo.service;
+
+import com.baomidou.mybatisplus.extension.service.IService;
+import com.springleaf.thinkdo.domain.entity.PlanEntity;
+import com.springleaf.thinkdo.domain.request.CreatePlanReq;
+import com.springleaf.thinkdo.domain.request.PlanQueryReq;
+import com.springleaf.thinkdo.domain.request.UpdatePlanReq;
+import com.springleaf.thinkdo.domain.response.PlanInfoResp;
+
+import java.util.List;
+
+/**
+ * 计划Service
+ */
+public interface PlanService extends IService<PlanEntity> {
+
+    /**
+     * 创建计划
+     * @param createPlanReq 创建计划请求
+     * @return 计划ID
+     */
+    Long createPlan(CreatePlanReq createPlanReq);
+
+    /**
+     * 更新计划
+     * @param updatePlanReq 更新计划请求
+     */
+    void updatePlan(UpdatePlanReq updatePlanReq);
+
+    /**
+     * 删除计划
+     * @param id 计划ID
+     */
+    void deletePlan(Long id);
+
+    /**
+     * 获取计划详情
+     * @param id 计划ID
+     * @return 计划信息
+     */
+    PlanInfoResp getPlanById(Long id);
+
+    /**
+     * 获取当前用户的计划列表
+     * @param queryReq 查询条件
+     * @return 计划列表
+     */
+    List<PlanInfoResp> getPlanList(PlanQueryReq queryReq);
+
+    /**
+     * 切换计划完成状态
+     * @param id 计划ID
+     */
+    void toggleStatus(Long id);
+}
