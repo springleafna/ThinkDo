@@ -20,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -84,6 +85,10 @@ public class PlanStepServiceImpl extends ServiceImpl<PlanStepMapper, PlanStepEnt
                 throw new BusinessException("无效的状态");
             }
             step.setStatus(updatePlanStepReq.getStatus());
+            // 如果步骤状态变为完成，检查是否所有步骤都完成，如果是则完成计划
+            if (PlanStatusEnum.COMPLETED.getCode().equals(updatePlanStepReq.getStatus())) {
+                checkAndCompletePlan(step.getPlanId());
+            }
         }
 
         planStepMapper.updateById(step);
@@ -168,15 +173,52 @@ public class PlanStepServiceImpl extends ServiceImpl<PlanStepMapper, PlanStepEnt
         }
 
         // 切换状态
-        if (PlanStatusEnum.NOT_STARTED.getCode().equals(step.getStatus())) {
+        boolean isCompleting = PlanStatusEnum.NOT_STARTED.getCode().equals(step.getStatus());
+        if (isCompleting) {
             step.setStatus(PlanStatusEnum.COMPLETED.getCode());
         } else {
             step.setStatus(PlanStatusEnum.NOT_STARTED.getCode());
         }
 
         planStepMapper.updateById(step);
-        String action = PlanStatusEnum.COMPLETED.getCode().equals(step.getStatus()) ? "完成" : "未完成";
+        String action = isCompleting ? "完成" : "未完成";
         log.info("步骤状态切换成功, userId={}, stepId={}, status={}", userId, id, action);
+
+        // 如果步骤状态变为完成，检查是否所有步骤都完成，如果是则完成计划
+        if (isCompleting) {
+            checkAndCompletePlan(step.getPlanId());
+        }
+    }
+
+    /**
+     * 检查计划的所有步骤是否都已完成，如果是则将计划状态设置为已完成
+     * @param planId 计划ID
+     */
+    private void checkAndCompletePlan(Long planId) {
+        // 查询该计划下的所有步骤
+        LambdaQueryWrapper<PlanStepEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(PlanStepEntity::getPlanId, planId);
+        List<PlanStepEntity> steps = planStepMapper.selectList(wrapper);
+
+        // 如果没有步骤，不做处理
+        if (steps.isEmpty()) {
+            return;
+        }
+
+        // 检查是否所有步骤都已完成
+        boolean allCompleted = steps.stream()
+                .allMatch(s -> PlanStatusEnum.COMPLETED.getCode().equals(s.getStatus()));
+
+        if (allCompleted) {
+            // 所有步骤都完成，将计划状态设置为已完成
+            PlanEntity plan = planMapper.selectById(planId);
+            if (plan != null && PlanStatusEnum.NOT_STARTED.getCode().equals(plan.getStatus())) {
+                plan.setStatus(PlanStatusEnum.COMPLETED.getCode());
+                plan.setCompletedAt(LocalDateTime.now());
+                planMapper.updateById(plan);
+                log.info("计划所有步骤已完成，自动完成计划, planId={}", planId);
+            }
+        }
     }
 
     /**

@@ -6,6 +6,7 @@ import com.springleaf.thinkdo.domain.request.CreatePlanReq;
 import com.springleaf.thinkdo.domain.request.PlanQueryReq;
 import com.springleaf.thinkdo.domain.request.UpdatePlanReq;
 import com.springleaf.thinkdo.domain.response.PlanInfoResp;
+import com.springleaf.thinkdo.domain.response.PlanQuadrantResp;
 
 import java.util.List;
 
@@ -52,4 +53,10 @@ public interface PlanService extends IService<PlanEntity> {
      * @param id 计划ID
      */
     void toggleStatus(Long id);
+
+    /**
+     * 获取四象限计划列表
+     * @return 四象限计划
+     */
+    PlanQuadrantResp getQuadrantPlans();
 }

@@ -9,6 +9,7 @@ import com.springleaf.thinkdo.domain.request.CreatePlanReq;
 import com.springleaf.thinkdo.domain.request.PlanQueryReq;
 import com.springleaf.thinkdo.domain.request.UpdatePlanReq;
 import com.springleaf.thinkdo.domain.response.PlanInfoResp;
+import com.springleaf.thinkdo.domain.response.PlanQuadrantResp;
 import com.springleaf.thinkdo.enums.PlanPriorityEnum;
 import com.springleaf.thinkdo.enums.PlanQuadrantEnum;
 import com.springleaf.thinkdo.enums.PlanRepeatTypeEnum;
@@ -26,8 +27,7 @@ import org.springframework.util.StringUtils;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -382,6 +382,60 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, PlanEntity> impleme
     private PlanInfoResp convertToResp(PlanEntity plan) {
         PlanInfoResp resp = new PlanInfoResp();
         BeanUtils.copyProperties(plan, resp);
+        return resp;
+    }
+
+    @Override
+    public PlanQuadrantResp getQuadrantPlans() {
+        Long userId = StpUtil.getLoginIdAsLong();
+
+        // 查询所有未完成的计划
+        LambdaQueryWrapper<PlanEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(PlanEntity::getUserId, userId)
+                .eq(PlanEntity::getStatus, PlanStatusEnum.NOT_STARTED.getCode())
+                .orderByDesc(PlanEntity::getPriority)
+                .orderByDesc(PlanEntity::getCreatedAt);
+
+        List<PlanEntity> planList = planMapper.selectList(wrapper);
+
+        // 获取分类名称
+        List<Long> categoryIds = planList.stream()
+                .map(PlanEntity::getCategoryId)
+                .filter(id -> id != null)
+                .distinct()
+                .collect(Collectors.toList());
+
+        Map<Long, String> categoryNameMap = Map.of();
+        if (!categoryIds.isEmpty()) {
+            LambdaQueryWrapper<PlanCategoryEntity> categoryWrapper = new LambdaQueryWrapper<>();
+            categoryWrapper.in(PlanCategoryEntity::getId, categoryIds)
+                    .select(PlanCategoryEntity::getId, PlanCategoryEntity::getName);
+            List<PlanCategoryEntity> categories = planCategoryMapper.selectList(categoryWrapper);
+            categoryNameMap = categories.stream()
+                    .collect(Collectors.toMap(PlanCategoryEntity::getId, PlanCategoryEntity::getName));
+        }
+
+        Map<Long, String> finalCategoryNameMap = categoryNameMap;
+
+        // 按四象限分组
+        Map<Integer, List<PlanInfoResp>> quadrantMap = planList.stream()
+                .map(plan -> {
+                    PlanInfoResp resp = convertToResp(plan);
+                    if (plan.getCategoryId() != null) {
+                        resp.setCategoryName(finalCategoryNameMap.get(plan.getCategoryId()));
+                    }
+                    return resp;
+                })
+                .collect(Collectors.groupingBy(plan -> plan.getQuadrant() != null ? plan.getQuadrant() : PlanQuadrantEnum.NONE.getCode()));
+
+        // 构建响应对象
+        PlanQuadrantResp resp = new PlanQuadrantResp();
+        resp.setImportantUrgent(quadrantMap.getOrDefault(PlanQuadrantEnum.IMPORTANT_URGENT.getCode(), Collections.emptyList()));
+        resp.setImportantNotUrgent(quadrantMap.getOrDefault(PlanQuadrantEnum.IMPORTANT_NOT_URGENT.getCode(), Collections.emptyList()));
+        resp.setUrgentNotImportant(quadrantMap.getOrDefault(PlanQuadrantEnum.URGENT_NOT_IMPORTANT.getCode(), Collections.emptyList()));
+        resp.setNotImportantNotUrgent(quadrantMap.getOrDefault(PlanQuadrantEnum.NOT_IMPORTANT_NOT_URGENT.getCode(), Collections.emptyList()));
+        resp.setUnclassified(quadrantMap.getOrDefault(PlanQuadrantEnum.NONE.getCode(), Collections.emptyList()));
+
         return resp;
     }
 }
