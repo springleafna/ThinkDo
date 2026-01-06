@@ -2,7 +2,6 @@ package com.springleaf.thinkdo.domain.request;
 
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
@@ -15,14 +14,12 @@ public class CreateMemoReq {
     /**
      * 便签标题
      */
-    @NotBlank(message = "便签标题不能为空")
     @Size(max = 100, message = "标题长度不能超过100个字符")
     private String title;
 
     /**
      * 便签内容
      */
-    @NotBlank(message = "便签内容不能为空")
     @Size(max = 5000, message = "内容长度不能超过5000个字符")
     private String content;
 

@@ -35,6 +35,11 @@ public class MemoServiceImpl extends ServiceImpl<MemoMapper, MemoEntity> impleme
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long createMemo(CreateMemoReq createMemoReq) {
+        // 校验标题和内容至少一项不为空
+        if (!StringUtils.hasText(createMemoReq.getTitle()) && !StringUtils.hasText(createMemoReq.getContent())) {
+            throw new BusinessException("便签标题和内容不能同时为空");
+        }
+
         Long userId = StpUtil.getLoginIdAsLong();
 
         MemoEntity memo = new MemoEntity();
@@ -64,6 +69,11 @@ public class MemoServiceImpl extends ServiceImpl<MemoMapper, MemoEntity> impleme
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void updateMemo(UpdateMemoReq updateMemoReq) {
+        // 校验标题和内容至少一项不为空
+        if (!StringUtils.hasText(updateMemoReq.getTitle()) && !StringUtils.hasText(updateMemoReq.getContent())) {
+            throw new BusinessException("便签标题和内容不能同时为空");
+        }
+
         Long userId = StpUtil.getLoginIdAsLong();
 
         MemoEntity memo = memoMapper.selectById(updateMemoReq.getId());
@@ -168,7 +178,7 @@ public class MemoServiceImpl extends ServiceImpl<MemoMapper, MemoEntity> impleme
 
         // 排序：置顶的在前，然后按更新时间倒序
         wrapper.orderByDesc(MemoEntity::getPinned)
-                .orderByDesc(MemoEntity::getUpdateTime);
+                .orderByDesc(MemoEntity::getUpdatedAt);
 
         List<MemoEntity> memoList = memoMapper.selectList(wrapper);
         return memoList.stream()
