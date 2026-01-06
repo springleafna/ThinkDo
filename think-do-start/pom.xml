@@ -25,11 +25,23 @@
         </dependency>
         <dependency>
             <groupId>com.springleaf</groupId>
+            <artifactId>think-do-framework</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.springleaf</groupId>
             <artifactId>think-do-system</artifactId>
         </dependency>
         <dependency>
             <groupId>com.springleaf</groupId>
-            <artifactId>think-do-framework</artifactId>
+            <artifactId>think-do-plan</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.springleaf</groupId>
+            <artifactId>think-do-note</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.springleaf</groupId>
+            <artifactId>think-do-knowledge</artifactId>
         </dependency>
     </dependencies>
 
