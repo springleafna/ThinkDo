@@ -55,14 +55,16 @@ public class PlanEntity {
     private String tags;
 
     /**
-     * 开始日期
+     * 开始时间
      */
-    private LocalDate startDate;
+    @TableField("start_time")
+    private LocalDateTime startTime;
 
     /**
-     * 截止日期
+     * 截止时间
      */
-    private LocalDate dueDate;
+    @TableField("due_time")
+    private LocalDateTime dueTime;
 
     /**
      * 重复类型：0-不重复, 1-每天, 2-每周, 3-每月, 4-每年, 5-工作日

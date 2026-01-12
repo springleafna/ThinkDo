@@ -57,16 +57,16 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, PlanEntity> impleme
             }
         }
 
-        // 验证开始日期和截止日期：要么都填要么都不填
-        if ((createPlanReq.getStartDate() == null && createPlanReq.getDueDate() != null) ||
-            (createPlanReq.getStartDate() != null && createPlanReq.getDueDate() == null)) {
-            throw new BusinessException("开始日期和截止日期必须同时填写或同时为空");
+        // 验证开始时间和截止时间：要么都填要么都不填
+        if ((createPlanReq.getStartTime() == null && createPlanReq.getDueTime() != null) ||
+            (createPlanReq.getStartTime() != null && createPlanReq.getDueTime() == null)) {
+            throw new BusinessException("开始时间和截止时间必须同时填写或同时为空");
         }
 
-        // 验证日期范围：开始日期不能晚于截止日期
-        if (createPlanReq.getStartDate() != null && createPlanReq.getDueDate() != null &&
-            createPlanReq.getStartDate().isAfter(createPlanReq.getDueDate())) {
-            throw new BusinessException("开始日期不能晚于截止日期");
+        // 验证时间范围：开始时间不能晚于截止时间
+        if (createPlanReq.getStartTime() != null && createPlanReq.getDueTime() != null &&
+            createPlanReq.getStartTime().isAfter(createPlanReq.getDueTime())) {
+            throw new BusinessException("开始时间不能晚于截止时间");
         }
 
         // 验证重复类型和重复截止日期
@@ -75,9 +75,9 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, PlanEntity> impleme
                 throw new BusinessException("无效的重复类型");
             }
             // 如果设置了重复截止日期，验证日期格式
-            if (createPlanReq.getRepeatUntil() != null && createPlanReq.getStartDate() != null &&
-                createPlanReq.getRepeatUntil().isBefore(createPlanReq.getStartDate())) {
-                throw new BusinessException("重复截止日期不能早于开始日期");
+            if (createPlanReq.getRepeatUntil() != null && createPlanReq.getStartTime() != null &&
+                createPlanReq.getRepeatUntil().isBefore(createPlanReq.getStartTime().toLocalDate())) {
+                throw new BusinessException("重复截止日期不能早于开始时间");
             }
         }
 
@@ -89,8 +89,8 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, PlanEntity> impleme
         plan.setPriority(createPlanReq.getPriority() != null ? createPlanReq.getPriority() : PlanPriorityEnum.MEDIUM.getCode());
         plan.setQuadrant(createPlanReq.getQuadrant() != null ? createPlanReq.getQuadrant() : PlanQuadrantEnum.NONE.getCode());
         plan.setTags(createPlanReq.getTags());
-        plan.setStartDate(createPlanReq.getStartDate());
-        plan.setDueDate(createPlanReq.getDueDate());
+        plan.setStartTime(createPlanReq.getStartTime());
+        plan.setDueTime(createPlanReq.getDueTime());
         plan.setRepeatType(createPlanReq.getRepeatType() != null ? createPlanReq.getRepeatType() : PlanRepeatTypeEnum.NONE.getCode());
         plan.setRepeatConf(createPlanReq.getRepeatConf());
         plan.setRepeatUntil(createPlanReq.getRepeatUntil());
@@ -128,25 +128,25 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, PlanEntity> impleme
             }
         }
 
-        // 如果更新开始日期和截止日期，需要验证
-        LocalDate newStartDate = updatePlanReq.getStartDate();
-        LocalDate newDueDate = updatePlanReq.getDueDate();
-        LocalDate currentStartDate = plan.getStartDate();
-        LocalDate currentDueDate = plan.getDueDate();
+        // 如果更新开始时间和截止时间，需要验证
+        LocalDateTime newStartTime = updatePlanReq.getStartTime();
+        LocalDateTime newDueTime = updatePlanReq.getDueTime();
+        LocalDateTime currentStartTime = plan.getStartTime();
+        LocalDateTime currentDueTime = plan.getDueTime();
 
-        // 确定实际的开始日期和截止日期
-        LocalDate finalStartDate = (newStartDate != null) ? newStartDate : currentStartDate;
-        LocalDate finalDueDate = (newDueDate != null) ? newDueDate : currentDueDate;
+        // 确定实际的开始时间和截止时间
+        LocalDateTime finalStartTime = (newStartTime != null) ? newStartTime : currentStartTime;
+        LocalDateTime finalDueTime = (newDueTime != null) ? newDueTime : currentDueTime;
 
-        // 如果只提供了一个日期，检查另一个是否存在
-        if ((newStartDate != null && newDueDate == null && currentDueDate == null) ||
-            (newDueDate != null && newStartDate == null && currentStartDate == null)) {
-            throw new BusinessException("开始日期和截止日期必须同时填写");
+        // 如果只提供了一个时间，检查另一个是否存在
+        if ((newStartTime != null && newDueTime == null && currentDueTime == null) ||
+            (newDueTime != null && newStartTime == null && currentStartTime == null)) {
+            throw new BusinessException("开始时间和截止时间必须同时填写");
         }
 
-        // 验证日期范围
-        if (finalStartDate != null && finalDueDate != null && finalStartDate.isAfter(finalDueDate)) {
-            throw new BusinessException("开始日期不能晚于截止日期");
+        // 验证时间范围
+        if (finalStartTime != null && finalDueTime != null && finalStartTime.isAfter(finalDueTime)) {
+            throw new BusinessException("开始时间不能晚于截止时间");
         }
 
         // 更新字段
@@ -174,11 +174,11 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, PlanEntity> impleme
         if (updatePlanReq.getTags() != null) {
             plan.setTags(updatePlanReq.getTags());
         }
-        if (newStartDate != null) {
-            plan.setStartDate(newStartDate);
+        if (newStartTime != null) {
+            plan.setStartTime(newStartTime);
         }
-        if (newDueDate != null) {
-            plan.setDueDate(newDueDate);
+        if (newDueTime != null) {
+            plan.setDueTime(newDueTime);
         }
         if (updatePlanReq.getRepeatType() != null) {
             if (!PlanRepeatTypeEnum.isValid(updatePlanReq.getRepeatType())) {
@@ -287,20 +287,20 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, PlanEntity> impleme
             wrapper.like(PlanEntity::getTags, queryReq.getTags());
         }
 
-        // 按开始日期范围筛选
-        if (queryReq.getStartDateFrom() != null) {
-            wrapper.ge(PlanEntity::getStartDate, queryReq.getStartDateFrom());
+        // 按开始时间范围筛选
+        if (queryReq.getStartTimeFrom() != null) {
+            wrapper.ge(PlanEntity::getStartTime, queryReq.getStartTimeFrom());
         }
-        if (queryReq.getStartDateTo() != null) {
-            wrapper.le(PlanEntity::getStartDate, queryReq.getStartDateTo());
+        if (queryReq.getStartTimeTo() != null) {
+            wrapper.le(PlanEntity::getStartTime, queryReq.getStartTimeTo());
         }
 
-        // 按截止日期范围筛选
-        if (queryReq.getDueDateFrom() != null) {
-            wrapper.ge(PlanEntity::getDueDate, queryReq.getDueDateFrom());
+        // 按截止时间范围筛选
+        if (queryReq.getDueTimeFrom() != null) {
+            wrapper.ge(PlanEntity::getDueTime, queryReq.getDueTimeFrom());
         }
-        if (queryReq.getDueDateTo() != null) {
-            wrapper.le(PlanEntity::getDueDate, queryReq.getDueDateTo());
+        if (queryReq.getDueTimeTo() != null) {
+            wrapper.le(PlanEntity::getDueTime, queryReq.getDueTimeTo());
         }
 
         // 关键词搜索

@@ -1,9 +1,8 @@
 package com.springleaf.thinkdo.domain.request;
 
-import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Data;
 
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 /**
  * 计划查询Request
@@ -47,26 +46,22 @@ public class PlanQueryReq {
     private Integer repeatType;
 
     /**
-     * 开始日期-查询开始
+     * 开始时间-查询开始
      */
-    @JsonFormat(pattern = "yyyy-MM-dd")
-    private LocalDate startDateFrom;
+    private LocalDateTime startTimeFrom;
 
     /**
-     * 开始日期-查询结束
+     * 开始时间-查询结束
      */
-    @JsonFormat(pattern = "yyyy-MM-dd")
-    private LocalDate startDateTo;
+    private LocalDateTime startTimeTo;
 
     /**
-     * 截止日期-查询开始
+     * 截止时间-查询开始
      */
-    @JsonFormat(pattern = "yyyy-MM-dd")
-    private LocalDate dueDateFrom;
+    private LocalDateTime dueTimeFrom;
 
     /**
-     * 截止日期-查询结束
+     * 截止时间-查询结束
      */
-    @JsonFormat(pattern = "yyyy-MM-dd")
-    private LocalDate dueDateTo;
+    private LocalDateTime dueTimeTo;
 }

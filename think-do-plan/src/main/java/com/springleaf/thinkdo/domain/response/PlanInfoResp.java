@@ -53,16 +53,14 @@ public class PlanInfoResp {
     private String tags;
 
     /**
-     * 开始日期
+     * 开始时间
      */
-    @JsonFormat(pattern = "yyyy-MM-dd HH:mm")
-    private LocalDate startDate;
+    private LocalDateTime startTime;
 
     /**
-     * 截止日期
+     * 截止时间
      */
-    @JsonFormat(pattern = "yyyy-MM-dd HH:mm")
-    private LocalDate dueDate;
+    private LocalDateTime dueTime;
 
     /**
      * 重复类型：0-不重复, 1-每天, 2-每周, 3-每月, 4-每年, 5-工作日
