@@ -52,4 +52,10 @@ public interface MemoService extends IService<MemoEntity> {
      * @param id 便签ID
      */
     void togglePinned(Long id);
+
+    /**
+     * 获取最新修改的两个便签
+     * @return 便签列表
+     */
+    List<MemoInfoResp> getLatestMemos();
 }

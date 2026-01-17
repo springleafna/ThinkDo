@@ -73,4 +73,12 @@ public class MemoController {
         memoService.togglePinned(id);
         return Result.success();
     }
+
+    /**
+     * 获取最新修改的两个便签
+     */
+    @GetMapping("/latest")
+    public Result<List<MemoInfoResp>> getLatestMemos() {
+        return Result.success(memoService.getLatestMemos());
+    }
 }

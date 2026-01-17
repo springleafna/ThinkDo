@@ -208,6 +208,22 @@ public class MemoServiceImpl extends ServiceImpl<MemoMapper, MemoEntity> impleme
         log.info("便签{}成功, userId={}, memoId={}", action, userId, id);
     }
 
+    @Override
+    public List<MemoInfoResp> getLatestMemos() {
+        Long userId = StpUtil.getLoginIdAsLong();
+
+        LambdaQueryWrapper<MemoEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(MemoEntity::getUserId, userId);
+        // 按更新时间倒序排序，取前两条
+        wrapper.orderByDesc(MemoEntity::getUpdatedAt)
+                .last("LIMIT 2");
+
+        List<MemoEntity> memoList = memoMapper.selectList(wrapper);
+        return memoList.stream()
+                .map(this::convertToResp)
+                .collect(Collectors.toList());
+    }
+
     /**
      * 转换为响应对象
      */
