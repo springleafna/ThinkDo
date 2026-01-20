@@ -28,6 +28,7 @@ CREATE TABLE tb_plan (
     user_id          BIGINT NOT NULL COMMENT '所属用户',
     category_id      BIGINT NULL COMMENT '分类ID',
     title            VARCHAR(255) NOT NULL COMMENT '计划标题',
+    type             TINYINT NOT NULL DEFAULT 0 COMMENT '计划类型：0.普通计划，1.四象限计划，2.每日计划',
     description      TEXT NULL COMMENT '计划描述',
     priority         TINYINT NOT NULL DEFAULT 2 COMMENT '计划优先级：1-低 2-中 3-高',
     quadrant         TINYINT NOT NULL DEFAULT 0 COMMENT '四象限状态：0-无, 1-重要且紧急, 2-重要不紧急, 3-紧急不重要, 4-不重要不紧急',
@@ -71,8 +72,6 @@ CREATE TABLE tb_plan_execution (
     completed_at    DATETIME NULL COMMENT '当天完成时间',
     created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    deleted         TINYINT(1) DEFAULT 0 COMMENT '删除标记(0:正常 1:删除)',
-
-    INDEX idx_execute_date (execute_date)
+    deleted         TINYINT(1) DEFAULT 0 COMMENT '删除标记(0:正常 1:删除)'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='每日清单表';
 
