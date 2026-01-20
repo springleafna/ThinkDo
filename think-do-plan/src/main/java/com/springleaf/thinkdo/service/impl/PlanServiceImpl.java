@@ -381,6 +381,24 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, PlanEntity> impleme
     }
 
     @Override
+    public List<PlanInfoResp> getPlanListByCategoryId(Long categoryId) {
+        Long userId = StpUtil.getLoginIdAsLong();
+
+        LambdaQueryWrapper<PlanEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(PlanEntity::getUserId, userId)
+                .eq(PlanEntity::getCategoryId, categoryId)
+                .orderByAsc(PlanEntity::getStatus)
+                .orderByDesc(PlanEntity::getPriority)
+                .orderByDesc(PlanEntity::getCreatedAt);
+
+        List<PlanEntity> planList = planMapper.selectList(wrapper);
+
+        return planList.stream()
+                .map(this::convertToResp)
+                .collect(Collectors.toList());
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public void toggleStatus(Long id) {
         Long userId = StpUtil.getLoginIdAsLong();

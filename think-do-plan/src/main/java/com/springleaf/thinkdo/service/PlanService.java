@@ -57,6 +57,13 @@ public interface PlanService extends IService<PlanEntity> {
     List<PlanInfoResp> getPlanList(PlanQueryReq queryReq);
 
     /**
+     * 根据分类ID获取计划列表
+     * @param categoryId 分类ID
+     * @return 计划列表
+     */
+    List<PlanInfoResp> getPlanListByCategoryId(Long categoryId);
+
+    /**
      * 切换计划完成状态
      * @param id 计划ID
      */

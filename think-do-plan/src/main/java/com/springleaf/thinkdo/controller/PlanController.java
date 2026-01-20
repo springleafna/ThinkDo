@@ -68,6 +68,14 @@ public class PlanController {
     }
 
     /**
+     * 根据分类ID获取计划列表
+     */
+    @GetMapping("/list/category/{categoryId}")
+    public Result<List<PlanInfoResp>> getPlanListByCategoryId(@PathVariable Long categoryId) {
+        return Result.success(planService.getPlanListByCategoryId(categoryId));
+    }
+
+    /**
      * 切换计划完成状态
      */
     @PutMapping("/toggleStatus/{id}")
