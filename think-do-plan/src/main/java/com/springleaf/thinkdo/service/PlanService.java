@@ -3,6 +3,7 @@ package com.springleaf.thinkdo.service;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.springleaf.thinkdo.domain.entity.PlanEntity;
 import com.springleaf.thinkdo.domain.request.CreatePlanReq;
+import com.springleaf.thinkdo.domain.request.CreateQuadrantPlanReq;
 import com.springleaf.thinkdo.domain.request.PlanQueryReq;
 import com.springleaf.thinkdo.domain.request.UpdatePlanReq;
 import com.springleaf.thinkdo.domain.response.PlanInfoResp;
@@ -21,6 +22,13 @@ public interface PlanService extends IService<PlanEntity> {
      * @return 计划ID
      */
     Long createPlan(CreatePlanReq createPlanReq);
+
+    /**
+     * 创建四象限计划
+     * @param createQuadrantPlanReq 创建四象限计划请求
+     * @return 计划ID
+     */
+    Long createQuadrantPlan(CreateQuadrantPlanReq createQuadrantPlanReq);
 
     /**
      * 更新计划

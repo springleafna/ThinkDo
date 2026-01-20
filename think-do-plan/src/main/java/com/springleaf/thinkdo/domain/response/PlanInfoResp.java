@@ -28,6 +28,11 @@ public class PlanInfoResp {
     private String categoryName;
 
     /**
+     * 计划类型：0-普通计划，1-四象限计划，2-每日计划
+     */
+    private Integer type;
+
+    /**
      * 计划标题
      */
     private String title;

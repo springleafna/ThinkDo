@@ -2,6 +2,7 @@ package com.springleaf.thinkdo.controller;
 
 import com.springleaf.thinkdo.common.Result;
 import com.springleaf.thinkdo.domain.request.CreatePlanReq;
+import com.springleaf.thinkdo.domain.request.CreateQuadrantPlanReq;
 import com.springleaf.thinkdo.domain.request.PlanQueryReq;
 import com.springleaf.thinkdo.domain.request.UpdatePlanReq;
 import com.springleaf.thinkdo.domain.response.PlanInfoResp;
@@ -73,6 +74,15 @@ public class PlanController {
     public Result<Void> toggleStatus(@PathVariable Long id) {
         planService.toggleStatus(id);
         return Result.success();
+    }
+
+    /**
+     * 创建四象限计划
+     */
+    @PostMapping("/createQuadrant")
+    public Result<Long> createQuadrantPlan(@RequestBody @Valid CreateQuadrantPlanReq createQuadrantPlanReq) {
+        Long planId = planService.createQuadrantPlan(createQuadrantPlanReq);
+        return Result.success(planId);
     }
 
     /**

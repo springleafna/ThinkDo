@@ -25,6 +25,11 @@ public class PlanEntity {
     private Long userId;
 
     /**
+     * 计划类型：0-普通计划，1-四象限计划，2-每日计划
+     */
+    private Integer type;
+
+    /**
      * 分类ID
      */
     private Long categoryId;

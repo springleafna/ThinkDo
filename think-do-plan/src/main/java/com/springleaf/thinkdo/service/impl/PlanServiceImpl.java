@@ -6,14 +6,17 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.springleaf.thinkdo.domain.entity.PlanCategoryEntity;
 import com.springleaf.thinkdo.domain.entity.PlanEntity;
 import com.springleaf.thinkdo.domain.request.CreatePlanReq;
+import com.springleaf.thinkdo.domain.request.CreateQuadrantPlanReq;
 import com.springleaf.thinkdo.domain.request.PlanQueryReq;
 import com.springleaf.thinkdo.domain.request.UpdatePlanReq;
 import com.springleaf.thinkdo.domain.response.PlanInfoResp;
 import com.springleaf.thinkdo.domain.response.PlanQuadrantResp;
+import com.springleaf.thinkdo.domain.response.PlanQuadrantResp.PlanQuadrantInfoResp;
 import com.springleaf.thinkdo.enums.PlanPriorityEnum;
 import com.springleaf.thinkdo.enums.PlanQuadrantEnum;
 import com.springleaf.thinkdo.enums.PlanRepeatTypeEnum;
 import com.springleaf.thinkdo.enums.PlanStatusEnum;
+import com.springleaf.thinkdo.enums.PlanTypeEnum;
 import com.springleaf.thinkdo.exception.BusinessException;
 import com.springleaf.thinkdo.mapper.PlanCategoryMapper;
 import com.springleaf.thinkdo.mapper.PlanMapper;
@@ -83,6 +86,7 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, PlanEntity> impleme
 
         PlanEntity plan = new PlanEntity();
         plan.setUserId(userId);
+        plan.setType(createPlanReq.getType() != null ? createPlanReq.getType() : PlanTypeEnum.NORMAL.getCode());
         plan.setCategoryId(createPlanReq.getCategoryId());
         plan.setTitle(createPlanReq.getTitle());
         plan.setDescription(createPlanReq.getDescription());
@@ -98,6 +102,30 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, PlanEntity> impleme
 
         planMapper.insert(plan);
         log.info("创建计划成功, userId={}, planId={}", userId, plan.getId());
+
+        return plan.getId();
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Long createQuadrantPlan(CreateQuadrantPlanReq createQuadrantPlanReq) {
+        Long userId = StpUtil.getLoginIdAsLong();
+
+        // 验证四象限状态
+        if (!PlanQuadrantEnum.isValid(createQuadrantPlanReq.getQuadrant())) {
+            throw new BusinessException("无效的四象限状态");
+        }
+
+        PlanEntity plan = new PlanEntity();
+        plan.setUserId(userId);
+        plan.setType(PlanTypeEnum.QUADRANT.getCode());
+        plan.setTitle(createQuadrantPlanReq.getTitle());
+        plan.setQuadrant(createQuadrantPlanReq.getQuadrant());
+        plan.setPriority(PlanPriorityEnum.MEDIUM.getCode());
+        plan.setStatus(PlanStatusEnum.NOT_STARTED.getCode());
+
+        planMapper.insert(plan);
+        log.info("创建四象限计划成功, userId={}, planId={}, quadrant={}", userId, plan.getId(), createQuadrantPlanReq.getQuadrant());
 
         return plan.getId();
     }
@@ -262,6 +290,11 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, PlanEntity> impleme
             wrapper.eq(PlanEntity::getCategoryId, queryReq.getCategoryId());
         }
 
+        // 按计划类型筛选
+        if (queryReq.getType() != null) {
+            wrapper.eq(PlanEntity::getType, queryReq.getType());
+        }
+
         // 按优先级筛选
         if (queryReq.getPriority() != null) {
             wrapper.eq(PlanEntity::getPriority, queryReq.getPriority());
@@ -398,34 +431,20 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, PlanEntity> impleme
 
         List<PlanEntity> planList = planMapper.selectList(wrapper);
 
-        // 获取分类名称
-        List<Long> categoryIds = planList.stream()
-                .map(PlanEntity::getCategoryId)
-                .filter(id -> id != null)
-                .distinct()
-                .collect(Collectors.toList());
-
-        Map<Long, String> categoryNameMap = Map.of();
-        if (!categoryIds.isEmpty()) {
-            LambdaQueryWrapper<PlanCategoryEntity> categoryWrapper = new LambdaQueryWrapper<>();
-            categoryWrapper.in(PlanCategoryEntity::getId, categoryIds)
-                    .select(PlanCategoryEntity::getId, PlanCategoryEntity::getName);
-            List<PlanCategoryEntity> categories = planCategoryMapper.selectList(categoryWrapper);
-            categoryNameMap = categories.stream()
-                    .collect(Collectors.toMap(PlanCategoryEntity::getId, PlanCategoryEntity::getName));
-        }
-
-        Map<Long, String> finalCategoryNameMap = categoryNameMap;
+        // 筛选四象限计划：quadrant不为null 或 type=1（四象限计划），并按id去重
+        List<PlanQuadrantInfoResp> quadrantPlanList = planList.stream()
+                .filter(plan -> plan.getQuadrant() != null || PlanTypeEnum.QUADRANT.getCode().equals(plan.getType()))
+                .collect(Collectors.toMap(
+                        PlanEntity::getId,
+                        this::convertToQuadrantInfoResp,
+                        (existing, replacement) -> existing
+                ))
+                .values()
+                .stream()
+                .toList();
 
         // 按四象限分组
-        Map<Integer, List<PlanInfoResp>> quadrantMap = planList.stream()
-                .map(plan -> {
-                    PlanInfoResp resp = convertToResp(plan);
-                    if (plan.getCategoryId() != null) {
-                        resp.setCategoryName(finalCategoryNameMap.get(plan.getCategoryId()));
-                    }
-                    return resp;
-                })
+        Map<Integer, List<PlanQuadrantInfoResp>> quadrantMap = quadrantPlanList.stream()
                 .collect(Collectors.groupingBy(plan -> plan.getQuadrant() != null ? plan.getQuadrant() : PlanQuadrantEnum.NONE.getCode()));
 
         // 构建响应对象
@@ -434,8 +453,26 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, PlanEntity> impleme
         resp.setImportantNotUrgent(quadrantMap.getOrDefault(PlanQuadrantEnum.IMPORTANT_NOT_URGENT.getCode(), Collections.emptyList()));
         resp.setUrgentNotImportant(quadrantMap.getOrDefault(PlanQuadrantEnum.URGENT_NOT_IMPORTANT.getCode(), Collections.emptyList()));
         resp.setNotImportantNotUrgent(quadrantMap.getOrDefault(PlanQuadrantEnum.NOT_IMPORTANT_NOT_URGENT.getCode(), Collections.emptyList()));
-        resp.setUnclassified(quadrantMap.getOrDefault(PlanQuadrantEnum.NONE.getCode(), Collections.emptyList()));
 
+        return resp;
+    }
+
+    /**
+     * 转换为四象限信息响应对象
+     */
+    private PlanQuadrantInfoResp convertToQuadrantInfoResp(PlanEntity plan) {
+        PlanQuadrantInfoResp resp = new PlanQuadrantInfoResp();
+        resp.setId(plan.getId());
+        resp.setType(plan.getType());
+        resp.setTitle(plan.getTitle());
+        resp.setDescription(plan.getDescription());
+        resp.setQuadrant(plan.getQuadrant());
+        resp.setStartTime(plan.getStartTime());
+        resp.setDueTime(plan.getDueTime());
+        resp.setRepeatType(plan.getRepeatType());
+        resp.setRepeatConf(plan.getRepeatConf());
+        resp.setRepeatUntil(plan.getRepeatUntil());
+        resp.setStatus(plan.getStatus());
         return resp;
     }
 }

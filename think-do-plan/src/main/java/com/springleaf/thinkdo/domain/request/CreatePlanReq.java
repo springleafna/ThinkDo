@@ -22,6 +22,13 @@ public class CreatePlanReq {
     private Long categoryId;
 
     /**
+     * 计划类型：0-普通计划，1-四象限计划，2-每日计划
+     */
+    @Min(value = 0, message = "计划类型只能为0、1或2")
+    @Max(value = 2, message = "计划类型只能为0、1或2")
+    private Integer type;
+
+    /**
      * 计划标题
      */
     @NotBlank(message = "计划标题不能为空")
