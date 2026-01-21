@@ -3,6 +3,7 @@ package com.springleaf.thinkdo.service;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.springleaf.thinkdo.domain.entity.PlanExecutionEntity;
 import com.springleaf.thinkdo.domain.request.CreatePlanExecutionReq;
+import com.springleaf.thinkdo.domain.request.UpdatePlanExecutionReq;
 import com.springleaf.thinkdo.domain.response.PlanExecutionInfoResp;
 
 import java.time.LocalDate;
@@ -19,6 +20,12 @@ public interface PlanExecutionService extends IService<PlanExecutionEntity> {
      * @return 每日清单ID
      */
     Long createPlanExecution(CreatePlanExecutionReq createPlanExecutionReq);
+
+    /**
+     * 更新每日计划
+     * @param updatePlanExecutionReq 更新每日计划请求
+     */
+    void updatePlanExecution(UpdatePlanExecutionReq updatePlanExecutionReq);
 
     /**
      * 删除每日清单

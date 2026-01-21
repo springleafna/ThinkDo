@@ -21,7 +21,6 @@ spring:
     redis:
       host: ${IP}
       port: ${REDIS_POST}
-      username: ${REDIS_USERNAME}
       password: ${REDIS_PASSWORD}
       database: ${REDIS_DATABASE}
       lettuce:

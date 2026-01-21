@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.springleaf.thinkdo.domain.entity.PlanEntity;
 import com.springleaf.thinkdo.domain.entity.PlanExecutionEntity;
 import com.springleaf.thinkdo.domain.request.CreatePlanExecutionReq;
+import com.springleaf.thinkdo.domain.request.UpdatePlanExecutionReq;
 import com.springleaf.thinkdo.domain.response.PlanExecutionInfoResp;
 import com.springleaf.thinkdo.enums.PlanExecutionStatusEnum;
 import com.springleaf.thinkdo.enums.PlanPriorityEnum;
@@ -82,6 +83,67 @@ public class PlanExecutionServiceImpl extends ServiceImpl<PlanExecutionMapper, P
         log.info("创建每日清单执行记录成功, userId={}, planId={}, executeDate={}", userId, plan.getId(), executeDate);
 
         return planExecution.getId();
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void updatePlanExecution(UpdatePlanExecutionReq updatePlanExecutionReq) {
+        Long userId = StpUtil.getLoginIdAsLong();
+
+        PlanExecutionEntity planExecution = planExecutionMapper.selectById(updatePlanExecutionReq.getId());
+        if (planExecution == null) {
+            throw new BusinessException("每日清单不存在");
+        }
+
+        // 获取关联的计划
+        PlanEntity plan = planMapper.selectById(planExecution.getPlanId());
+        if (plan == null || !plan.getUserId().equals(userId)) {
+            throw new BusinessException("无权修改此每日计划");
+        }
+
+        // 如果更新开始时间和截止时间，需要验证
+        LocalDateTime newStartTime = updatePlanExecutionReq.getStartTime();
+        LocalDateTime newDueTime = updatePlanExecutionReq.getDueTime();
+        LocalDateTime currentStartTime = plan.getStartTime();
+        LocalDateTime currentDueTime = plan.getDueTime();
+
+        // 确定实际的开始时间和截止时间
+        LocalDateTime finalStartTime = (newStartTime != null) ? newStartTime : currentStartTime;
+        LocalDateTime finalDueTime = (newDueTime != null) ? newDueTime : currentDueTime;
+
+        // 如果只提供了一个时间，检查另一个是否存在
+        if ((newStartTime != null && newDueTime == null && currentDueTime == null) ||
+            (newDueTime != null && newStartTime == null && currentStartTime == null)) {
+            throw new BusinessException("开始时间和截止时间必须同时填写");
+        }
+
+        // 验证时间范围
+        if (finalStartTime != null && finalDueTime != null && finalStartTime.isAfter(finalDueTime)) {
+            throw new BusinessException("开始时间不能晚于截止时间");
+        }
+
+        // 更新计划表字段
+        if (updatePlanExecutionReq.getTitle() != null) {
+            plan.setTitle(updatePlanExecutionReq.getTitle());
+        }
+        if (updatePlanExecutionReq.getPriority() != null) {
+            if (!PlanPriorityEnum.isValid(updatePlanExecutionReq.getPriority())) {
+                throw new BusinessException("无效的优先级");
+            }
+            plan.setPriority(updatePlanExecutionReq.getPriority());
+        }
+        if (newStartTime != null) {
+            plan.setStartTime(newStartTime);
+        }
+        if (newDueTime != null) {
+            plan.setDueTime(newDueTime);
+        }
+        if (updatePlanExecutionReq.getTags() != null) {
+            plan.setTags(updatePlanExecutionReq.getTags());
+        }
+
+        planMapper.updateById(plan);
+        log.info("更新每日计划成功, userId={}, planExecutionId={}, planId={}", userId, planExecution.getId(), plan.getId());
     }
 
     @Override

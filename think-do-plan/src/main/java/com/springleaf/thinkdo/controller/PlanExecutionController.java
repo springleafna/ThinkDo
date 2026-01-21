@@ -2,6 +2,7 @@ package com.springleaf.thinkdo.controller;
 
 import com.springleaf.thinkdo.common.Result;
 import com.springleaf.thinkdo.domain.request.CreatePlanExecutionReq;
+import com.springleaf.thinkdo.domain.request.UpdatePlanExecutionReq;
 import com.springleaf.thinkdo.domain.response.PlanExecutionInfoResp;
 import com.springleaf.thinkdo.service.PlanExecutionService;
 import jakarta.validation.Valid;
@@ -30,6 +31,15 @@ public class PlanExecutionController {
     public Result<Long> createPlanExecution(@RequestBody @Valid CreatePlanExecutionReq createPlanExecutionReq) {
         Long id = planExecutionService.createPlanExecution(createPlanExecutionReq);
         return Result.success(id);
+    }
+
+    /**
+     * 更新每日计划
+     */
+    @PutMapping("/update")
+    public Result<Void> updatePlanExecution(@RequestBody @Valid UpdatePlanExecutionReq updatePlanExecutionReq) {
+        planExecutionService.updatePlanExecution(updatePlanExecutionReq);
+        return Result.success();
     }
 
     /**
