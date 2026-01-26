@@ -3,15 +3,15 @@ package com.springleaf.thinkdo.service.impl;
 import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.springleaf.thinkdo.domain.entity.PlanEntity;
 import com.springleaf.thinkdo.domain.entity.PlanExecutionEntity;
 import com.springleaf.thinkdo.domain.request.CreatePlanExecutionReq;
 import com.springleaf.thinkdo.domain.request.UpdatePlanExecutionReq;
 import com.springleaf.thinkdo.domain.response.PlanExecutionInfoResp;
-import com.springleaf.thinkdo.enums.PlanExecutionStatusEnum;
-import com.springleaf.thinkdo.enums.PlanPriorityEnum;
-import com.springleaf.thinkdo.enums.PlanStatusEnum;
-import com.springleaf.thinkdo.enums.PlanTypeEnum;
+import com.springleaf.thinkdo.enums.*;
 import com.springleaf.thinkdo.exception.BusinessException;
 import com.springleaf.thinkdo.mapper.PlanExecutionMapper;
 import com.springleaf.thinkdo.mapper.PlanMapper;
@@ -24,6 +24,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
+import java.time.temporal.TemporalAdjusters;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -38,6 +41,7 @@ public class PlanExecutionServiceImpl extends ServiceImpl<PlanExecutionMapper, P
 
     private final PlanExecutionMapper planExecutionMapper;
     private final PlanMapper planMapper;
+    private final ObjectMapper objectMapper;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -215,35 +219,112 @@ public class PlanExecutionServiceImpl extends ServiceImpl<PlanExecutionMapper, P
     public List<PlanExecutionInfoResp> getPlanExecutionListByDate(LocalDate executeDate) {
         Long userId = StpUtil.getLoginIdAsLong();
 
-        // 查询当前用户的所有计划ID
-        LambdaQueryWrapper<PlanEntity> planWrapper = new LambdaQueryWrapper<>();
-        planWrapper.eq(PlanEntity::getUserId, userId)
-                .select(PlanEntity::getId, PlanEntity::getTitle, PlanEntity::getDescription, PlanEntity::getType,
-                        PlanEntity::getPriority, PlanEntity::getStartTime, PlanEntity::getDueTime, PlanEntity::getTags);
-        List<PlanEntity> planList = planMapper.selectList(planWrapper);
-        List<Long> planIds = planList.stream().map(PlanEntity::getId).collect(Collectors.toList());
+        // 1. 获取每日计划列表
+        List<PlanEntity> dailyPlanList = getDailyPlans(userId, executeDate);
+        List<PlanEntity> repeatPlanList = getRepeatPlans(userId, executeDate);
 
-        if (planIds.isEmpty()) {
-            return List.of();
-        }
+        // 2. 处理execution表中存在的计划
+        List<PlanExecutionInfoResp> planExecutionInfoRespList = new ArrayList<>();
 
-        // 查询指定日期的执行记录
-        LambdaQueryWrapper<PlanExecutionEntity> wrapper = new LambdaQueryWrapper<>();
-        wrapper.in(PlanExecutionEntity::getPlanId, planIds)
-                .eq(PlanExecutionEntity::getExecuteDate, executeDate)
-                .orderByDesc(PlanExecutionEntity::getCreatedAt);
+        // 处理每日计划
+        processPlans(dailyPlanList, executeDate, planExecutionInfoRespList);
+        // 处理重复计划
+        processPlans(repeatPlanList, executeDate, planExecutionInfoRespList);
 
-        List<PlanExecutionEntity> executionList = planExecutionMapper.selectList(wrapper);
-
-        // 构建计划信息映射
-        Map<Long, PlanEntity> planMap = planList.stream()
-                .collect(Collectors.toMap(PlanEntity::getId, p -> p));
-
-        return executionList.stream()
-                .map(execution -> convertToResp(execution, planMap.get(execution.getPlanId())))
-                .collect(Collectors.toList());
+        return planExecutionInfoRespList;
     }
 
+    /**
+     * 获取每日计划列表
+     */
+    private List<PlanEntity> getDailyPlans(Long userId, LocalDate executeDate) {
+        LocalDateTime start = executeDate.atStartOfDay();
+        LocalDateTime end = executeDate.plusDays(1).atStartOfDay();
+
+        LambdaQueryWrapper<PlanEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(PlanEntity::getUserId, userId)
+                .eq(PlanEntity::getType, PlanTypeEnum.DAILY.getCode())
+                .ge(PlanEntity::getCreatedAt, start)
+                .lt(PlanEntity::getCreatedAt, end)
+                .select(PlanEntity::getId, PlanEntity::getTitle, PlanEntity::getDescription,
+                        PlanEntity::getType, PlanEntity::getPriority, PlanEntity::getStartTime,
+                        PlanEntity::getDueTime, PlanEntity::getTags, PlanEntity::getStatus,
+                        PlanEntity::getCompletedAt, PlanEntity::getCreatedAt, PlanEntity::getUpdatedAt);
+
+        return planMapper.selectList(wrapper);
+    }
+
+    /**
+     * 获取重复计划列表
+     */
+    private List<PlanEntity> getRepeatPlans(Long userId, LocalDate executeDate) {
+        LambdaQueryWrapper<PlanEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(PlanEntity::getUserId, userId)
+                .eq(PlanEntity::getType, PlanTypeEnum.NORMAL.getCode())
+                .ne(PlanEntity::getRepeatType, PlanRepeatTypeEnum.NONE.getCode())
+                .select(PlanEntity::getId, PlanEntity::getTitle, PlanEntity::getDescription, PlanEntity::getType, PlanEntity::getStatus,
+                        PlanEntity::getCompletedAt, PlanEntity::getCreatedAt, PlanEntity::getUpdatedAt, PlanEntity::getPriority, PlanEntity::getStartTime,
+                        PlanEntity::getDueTime, PlanEntity::getTags, PlanEntity::getRepeatType, PlanEntity::getRepeatConf, PlanEntity::getRepeatUntil);
+
+        List<PlanEntity> repeatPlanList = planMapper.selectList(wrapper);
+
+        repeatPlanList.removeIf(plan -> !isPlanActiveToday(plan, executeDate));
+
+        return repeatPlanList;
+    }
+
+    /**
+     * 处理计划列表，转换为响应对象
+     */
+    private void processPlans(List<PlanEntity> planList, LocalDate executeDate,
+                              List<PlanExecutionInfoResp> resultList) {
+        for (PlanEntity planEntity : planList) {
+            PlanExecutionInfoResp resp = buildPlanExecutionResp(planEntity, executeDate);
+            if (resp != null) {
+                resultList.add(resp);
+            }
+        }
+    }
+
+    /**
+     * 构建计划执行响应对象
+     */
+    private PlanExecutionInfoResp buildPlanExecutionResp(PlanEntity planEntity, LocalDate executeDate) {
+        // 检查执行记录
+        LambdaQueryWrapper<PlanExecutionEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(PlanExecutionEntity::getPlanId, planEntity.getId())
+                .eq(PlanExecutionEntity::getExecuteDate, executeDate);
+        PlanExecutionEntity planExecutionEntity = planExecutionMapper.selectOne(wrapper);
+
+        // 如果存在且已删除，则跳过
+        if (planExecutionEntity != null && planExecutionEntity.getDeleted() == 1) {
+            return null;
+        }
+
+        // 创建响应对象
+        PlanExecutionInfoResp resp = new PlanExecutionInfoResp();
+
+        // 设置状态：优先使用执行记录的状态，否则使用计划状态
+        Integer status = (planExecutionEntity != null)
+                ? planExecutionEntity.getStatus()
+                : planEntity.getStatus();
+        resp.setStatus(status);
+
+        // 设置公共字段
+        resp.setPlanId(planEntity.getId());
+        resp.setPlanTitle(planEntity.getTitle());
+        resp.setPlanType(planEntity.getType());
+        resp.setPriority(planEntity.getPriority());
+        resp.setStartTime(planEntity.getStartTime());
+        resp.setDueTime(planEntity.getDueTime());
+        resp.setTags(planEntity.getTags());
+        resp.setExecuteDate(executeDate);
+        resp.setCompletedAt(planEntity.getCompletedAt());
+        resp.setCreatedAt(planEntity.getCreatedAt());
+        resp.setUpdatedAt(planEntity.getUpdatedAt());
+
+        return resp;
+    }
     @Override
     public PlanExecutionInfoResp getPlanExecutionById(Long id) {
         Long userId = StpUtil.getLoginIdAsLong();
@@ -318,5 +399,96 @@ public class PlanExecutionServiceImpl extends ServiceImpl<PlanExecutionMapper, P
             resp.setTags(plan.getTags());
         }
         return resp;
+    }
+
+    /**
+     * 判断某个配置了重复规则的计划在指定日期是否存在
+     */
+    public boolean isPlanActiveToday(PlanEntity plan, LocalDate targetDate) {
+        // 0. 确定“有效开始日期”,如果有 start_time，以 start_time 为准，如果没有 start_time，以 created_at (创建时间) 为准
+        LocalDate startDate;
+        if (plan.getStartTime() != null) {
+            startDate = plan.getStartTime().toLocalDate();
+        } else {
+            startDate = plan.getCreatedAt().toLocalDate();
+        }
+
+        // 1. 如果目标日期在开始日期之前，肯定不显示
+        if (targetDate.isBefore(startDate)) {
+            return false;
+        }
+
+        /*// 2. 如果是不重复任务 (repeat_type = 0)
+        if (plan.getRepeatType() == 0) {
+            LocalDate dueDate = plan.getDueTime() != null ? plan.getDueTime().toLocalDate() : null;
+            // 如果有截止时间，targetDate 不能晚于 dueDate
+            return dueDate == null || !targetDate.isAfter(dueDate);
+        }*/
+
+        // 3. 解析 JSON 配置 (Jackson)
+        // 如果是重复任务但没有配置，默认不显示或根据业务逻辑容错
+        if (plan.getRepeatConf() == null || plan.getRepeatConf().isEmpty()) {
+            // 如果是每天重复(type=1)且没有conf，可以默认为 interval=1，否则返回false
+            if (plan.getRepeatType() != 1) return false;
+        }
+
+        JsonNode conf;
+        try {
+            // 对于 type=1 且 conf 为空的情况，给一个空对象节点防止报错，方便后续取默认值
+            String jsonStr = (plan.getRepeatConf() == null || plan.getRepeatConf().isEmpty()) ? "{}" : plan.getRepeatConf();
+            conf = objectMapper.readTree(jsonStr);
+        } catch (JsonProcessingException e) {
+            // 记录日志，这里简单抛出或返回 false
+            e.printStackTrace();
+            return false;
+        }
+
+        // 4. 根据类型判断
+        switch (plan.getRepeatType()) {
+            case 1: // 每天
+                // Jackson: path() 方法安全，不存在时不会报空指针，asInt(1) 提供默认值
+                int interval = conf.path("interval").asInt(1);
+                long daysDiff = ChronoUnit.DAYS.between(startDate, targetDate);
+                return daysDiff >= 0 && (daysDiff % interval == 0);
+
+            case 2: // 每周
+                // JSON: {"days": [1, 3]}
+                int todayOfWeek = targetDate.getDayOfWeek().getValue();
+                JsonNode daysNode = conf.get("days");
+
+                if (daysNode != null && daysNode.isArray()) {
+                    // Jackson 没有直接转 List 的简便方法，建议直接遍历 ArrayNode
+                    for (JsonNode day : daysNode) {
+                        if (day.asInt() == todayOfWeek) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+
+            case 3: // 每月
+                // JSON: {"day": 15} 或 {"day": -1}
+                int targetDayOfMonth = conf.path("day").asInt(0); // 默认为0表示未配置
+                if (targetDayOfMonth == -1) {
+                    // 判断今天是不是当月最后一天
+                    return targetDate.equals(targetDate.with(TemporalAdjusters.lastDayOfMonth()));
+                } else {
+                    return targetDate.getDayOfMonth() == targetDayOfMonth;
+                }
+
+            case 4: // 每年
+                // JSON: {"month": 10, "day": 1}
+                int targetMonth = conf.path("month").asInt(0);
+                int targetDay = conf.path("day").asInt(0);
+                return targetDate.getMonthValue() == targetMonth && targetDate.getDayOfMonth() == targetDay;
+
+            case 5: // 工作日
+                int dayOfWeek = targetDate.getDayOfWeek().getValue();
+                // 周一(1) 到 周五(5)
+                return dayOfWeek >= 1 && dayOfWeek <= 5;
+
+            default:
+                return false;
+        }
     }
 }
