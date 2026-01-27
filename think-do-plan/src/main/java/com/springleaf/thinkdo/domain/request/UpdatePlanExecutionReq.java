@@ -15,9 +15,9 @@ import java.time.LocalDateTime;
 public class UpdatePlanExecutionReq {
 
     /**
-     * 每日清单ID
+     * 计划ID
      */
-    @NotNull(message = "每日清单ID不能为空")
+    @NotNull(message = "计划ID不能为空")
     private Long id;
 
     /**

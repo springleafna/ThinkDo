@@ -29,13 +29,13 @@ public interface PlanExecutionService extends IService<PlanExecutionEntity> {
 
     /**
      * 删除每日清单
-     * @param id 每日清单ID
+     * @param id 计划ID
      */
     void deletePlanExecution(Long id);
 
     /**
      * 切换每日清单状态
-     * @param id 每日清单ID
+     * @param id 计划ID
      */
     void toggleStatus(Long id);
 

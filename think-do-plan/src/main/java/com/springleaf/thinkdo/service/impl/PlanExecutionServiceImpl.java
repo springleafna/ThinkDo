@@ -26,9 +26,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -60,10 +58,7 @@ public class PlanExecutionServiceImpl extends ServiceImpl<PlanExecutionMapper, P
             throw new BusinessException("开始时间不能晚于截止时间");
         }
 
-        // 确定执行日期，如果未指定则使用当天
-        LocalDate executeDate = createPlanExecutionReq.getExecuteDate() != null ? createPlanExecutionReq.getExecuteDate() : LocalDate.now();
-
-        // 先创建计划（type=2 每日计划）
+        // 创建计划（type=2 每日计划）
         PlanEntity plan = new PlanEntity();
         plan.setUserId(userId);
         plan.setType(PlanTypeEnum.DAILY.getCode());
@@ -77,77 +72,83 @@ public class PlanExecutionServiceImpl extends ServiceImpl<PlanExecutionMapper, P
         planMapper.insert(plan);
         log.info("创建每日计划成功, userId={}, planId={}", userId, plan.getId());
 
-        // 再创建执行记录
-        PlanExecutionEntity planExecution = new PlanExecutionEntity();
-        planExecution.setPlanId(plan.getId());
-        planExecution.setExecuteDate(executeDate);
-        planExecution.setStatus(PlanExecutionStatusEnum.NOT_COMPLETED.getCode());
-
-        planExecutionMapper.insert(planExecution);
-        log.info("创建每日清单执行记录成功, userId={}, planId={}, executeDate={}", userId, plan.getId(), executeDate);
-
-        return planExecution.getId();
+        return plan.getId();
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void updatePlanExecution(UpdatePlanExecutionReq updatePlanExecutionReq) {
+    public void updatePlanExecution(UpdatePlanExecutionReq req) {
         Long userId = StpUtil.getLoginIdAsLong();
 
-        PlanExecutionEntity planExecution = planExecutionMapper.selectById(updatePlanExecutionReq.getId());
-        if (planExecution == null) {
-            throw new BusinessException("每日清单不存在");
-        }
-
-        // 获取关联的计划
-        PlanEntity plan = planMapper.selectById(planExecution.getPlanId());
+        PlanEntity plan = planMapper.selectById(req.getId());
         if (plan == null || !plan.getUserId().equals(userId)) {
             throw new BusinessException("无权修改此每日计划");
         }
 
         // 如果更新开始时间和截止时间，需要验证
-        LocalDateTime newStartTime = updatePlanExecutionReq.getStartTime();
-        LocalDateTime newDueTime = updatePlanExecutionReq.getDueTime();
-        LocalDateTime currentStartTime = plan.getStartTime();
-        LocalDateTime currentDueTime = plan.getDueTime();
+        LocalDateTime targetStartTime = req.getStartTime() != null ? req.getStartTime() : plan.getStartTime();
+        LocalDateTime targetDueTime = req.getDueTime() != null ? req.getDueTime() : plan.getDueTime();
 
-        // 确定实际的开始时间和截止时间
-        LocalDateTime finalStartTime = (newStartTime != null) ? newStartTime : currentStartTime;
-        LocalDateTime finalDueTime = (newDueTime != null) ? newDueTime : currentDueTime;
-
-        // 如果只提供了一个时间，检查另一个是否存在
-        if ((newStartTime != null && newDueTime == null && currentDueTime == null) ||
-            (newDueTime != null && newStartTime == null && currentStartTime == null)) {
-            throw new BusinessException("开始时间和截止时间必须同时填写");
-        }
-
-        // 验证时间范围
-        if (finalStartTime != null && finalDueTime != null && finalStartTime.isAfter(finalDueTime)) {
+        if (targetStartTime != null && targetDueTime != null && targetStartTime.isAfter(targetDueTime)) {
             throw new BusinessException("开始时间不能晚于截止时间");
         }
 
-        // 更新计划表字段
-        if (updatePlanExecutionReq.getTitle() != null) {
-            plan.setTitle(updatePlanExecutionReq.getTitle());
-        }
-        if (updatePlanExecutionReq.getPriority() != null) {
-            if (!PlanPriorityEnum.isValid(updatePlanExecutionReq.getPriority())) {
-                throw new BusinessException("无效的优先级");
+        // 如果是每日计划直接更新plan表的该计划即可
+        if (plan.getType().equals(PlanTypeEnum.DAILY.getCode())) {
+            if (req.getTitle() != null) plan.setTitle(req.getTitle());
+            if (req.getPriority() != null) {
+                if (!PlanPriorityEnum.isValid(req.getPriority())) {
+                    throw new BusinessException("无效的优先级");
+                }
+                plan.setPriority(req.getPriority());
             }
-            plan.setPriority(updatePlanExecutionReq.getPriority());
-        }
-        if (newStartTime != null) {
-            plan.setStartTime(newStartTime);
-        }
-        if (newDueTime != null) {
-            plan.setDueTime(newDueTime);
-        }
-        if (updatePlanExecutionReq.getTags() != null) {
-            plan.setTags(updatePlanExecutionReq.getTags());
-        }
+            if (req.getTags() != null) plan.setTags(req.getTags());
+            plan.setStartTime(targetStartTime);
+            plan.setDueTime(targetDueTime);
+            planMapper.updateById(plan);
 
-        planMapper.updateById(plan);
-        log.info("更新每日计划成功, userId={}, planExecutionId={}, planId={}", userId, planExecution.getId(), plan.getId());
+            log.info("更新Type-2每日计划成功, planId={}", plan.getId());
+        } else if (plan.getType().equals(PlanTypeEnum.NORMAL.getCode()) && !Objects.equals(plan.getRepeatType(), PlanRepeatTypeEnum.NONE.getCode())) {
+            LocalDate executeDate = LocalDate.now();
+            // 屏蔽原计划在当天的显示
+            // 查找是否已有 execution 记录
+            PlanExecutionEntity existingExe = planExecutionMapper.selectIgnoreLogicDelete(plan.getId(), executeDate);
+
+            if (existingExe == null) {
+                // 如果没有，插入一条 deleted=1 的记录
+                PlanExecutionEntity blockRecord = new PlanExecutionEntity();
+                blockRecord.setPlanId(plan.getId());
+                blockRecord.setExecuteDate(executeDate);
+                blockRecord.setDeleted(1);
+                planExecutionMapper.insert(blockRecord);
+            } else {
+                // 如果有，直接更新为 deleted=1
+                planExecutionMapper.deleteById(existingExe);
+            }
+
+            // 创建新的 Type=2 分身计划
+            PlanEntity forkPlan = new PlanEntity();
+            // 复制原计划基础信息
+            forkPlan.setUserId(userId);
+            forkPlan.setCategoryId(plan.getCategoryId());
+            forkPlan.setDescription(plan.getDescription());
+            forkPlan.setQuadrant(plan.getQuadrant());
+            forkPlan.setType(PlanTypeEnum.DAILY.getCode()); // 变更为每日计划
+            forkPlan.setStatus(PlanStatusEnum.NOT_STARTED.getCode());
+
+            // 应用修改后的属性 (如果req没传，就用原计划的)
+            forkPlan.setTitle(req.getTitle() != null ? req.getTitle() : plan.getTitle());
+            forkPlan.setPriority(req.getPriority() != null ? req.getPriority() : plan.getPriority());
+            forkPlan.setTags(req.getTags() != null ? req.getTags() : plan.getTags());
+            forkPlan.setStartTime(targetStartTime);
+            forkPlan.setDueTime(targetDueTime);
+            planMapper.insert(forkPlan);
+
+            log.info("分身策略更新成功: 原PlanId={} 被屏蔽, 新PlanId={} 创建", plan.getId(), forkPlan.getId());
+
+        } else {
+            throw new BusinessException("该计划类型不支持此修改操作");
+        }
     }
 
     @Override
@@ -155,64 +156,92 @@ public class PlanExecutionServiceImpl extends ServiceImpl<PlanExecutionMapper, P
     public void deletePlanExecution(Long id) {
         Long userId = StpUtil.getLoginIdAsLong();
 
-        PlanExecutionEntity planExecution = planExecutionMapper.selectById(id);
-        if (planExecution == null) {
-            throw new BusinessException("每日清单不存在");
-        }
-
         // 验证计划是否属于当前用户
-        PlanEntity plan = planMapper.selectById(planExecution.getPlanId());
+        PlanEntity plan = planMapper.selectById(id);
         if (plan == null || !plan.getUserId().equals(userId)) {
             throw new BusinessException("无权删除此每日清单");
         }
 
-        // 删除执行记录
-        planExecutionMapper.deleteById(id);
+        // 查找是否已有 execution 记录
+        LocalDate executeDate = LocalDate.now();
+        PlanExecutionEntity existingExe = planExecutionMapper.selectIgnoreLogicDelete(plan.getId(), executeDate);
 
-        // 同步删除计划表中的数据
-        planMapper.deleteById(planExecution.getPlanId());
+        if (plan.getType().equals(PlanTypeEnum.DAILY.getCode())) {
+            // 如果是每日计划 (Type 2)直接软删除 Plan表即可
+            planMapper.deleteById(plan);
 
-        log.info("删除每日计划成功, userId={}, planExecutionId={}, planId={}", userId, id, planExecution.getPlanId());
+            if (existingExe != null) {
+                planExecutionMapper.deleteById(existingExe);
+            }
+        } else if (plan.getType().equals(PlanTypeEnum.NORMAL.getCode()) && !Objects.equals(plan.getRepeatType(), PlanRepeatTypeEnum.NONE.getCode())) {
+            // 如果是配置了重复规则的普通计划，则不能删 Plan，只能在 Execution 表里“屏蔽”这一天
+
+            if (existingExe != null) {
+                // 如果本来就有记录，直接标记删除
+                planExecutionMapper.deleteById(existingExe);
+            } else {
+                // 如果没有，插入一条 deleted=1 的记录
+                PlanExecutionEntity blockRecord = new PlanExecutionEntity();
+                blockRecord.setPlanId(id);
+                blockRecord.setExecuteDate(executeDate);
+                blockRecord.setDeleted(1);
+                planExecutionMapper.insert(blockRecord);
+            }
+        } else {
+            throw new BusinessException("该计划类型不支持此修改操作");
+        }
+
+        log.info("删除计划成功 userId={}, planId={}, date={}", userId, id, executeDate);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void toggleStatus(Long id) {
+    public void toggleStatus(Long planId) {
         Long userId = StpUtil.getLoginIdAsLong();
 
-        PlanExecutionEntity planExecution = planExecutionMapper.selectById(id);
-        if (planExecution == null) {
-            throw new BusinessException("每日清单不存在");
+        PlanEntity plan = planMapper.selectById(planId);
+        if (plan == null) {
+            throw new BusinessException("计划不存在");
+        }
+        if (!plan.getUserId().equals(userId)) {
+            throw new BusinessException("无权修改此计划");
         }
 
-        // 验证计划是否属于当前用户
-        PlanEntity plan = planMapper.selectById(planExecution.getPlanId());
-        if (plan == null || !plan.getUserId().equals(userId)) {
-            throw new BusinessException("无权修改此每日清单");
-        }
+        // 查找当天的 Execution 记录
+        LocalDate executeDate = LocalDate.now();
+        PlanExecutionEntity execution = planExecutionMapper.selectIgnoreLogicDelete(plan.getId(), executeDate);
 
-        // 切换执行记录状态
-        if (PlanExecutionStatusEnum.NOT_COMPLETED.getCode().equals(planExecution.getStatus())) {
-            planExecution.setStatus(PlanExecutionStatusEnum.COMPLETED.getCode());
-            planExecution.setCompletedAt(LocalDateTime.now());
+        // 计算新状态:如果没有记录，默认为未完成(0)，新状态就是完成(1);如果有记录，取反
+        Integer currentStatus = (execution != null) ? execution.getStatus() : PlanExecutionStatusEnum.NOT_COMPLETED.getCode();
+        Integer newStatus = (currentStatus == 1) ? 0 : 1;
+
+        // 更新或插入 Execution 记录
+        if (execution == null) {
+            // 懒加载：插入新记录
+            execution = new PlanExecutionEntity();
+            execution.setPlanId(plan.getId());
+            execution.setExecuteDate(executeDate);
+            execution.setStatus(newStatus);
+            execution.setCompletedAt(newStatus == 1 ? LocalDateTime.now() : null);
+            planExecutionMapper.insert(execution);
         } else {
-            planExecution.setStatus(PlanExecutionStatusEnum.NOT_COMPLETED.getCode());
-            planExecution.setCompletedAt(null);
+            // 更新已有记录
+            execution.setStatus(newStatus);
+            execution.setCompletedAt(newStatus == 1 ? LocalDateTime.now() : null);
+            planExecutionMapper.updateById(execution);
         }
-        planExecutionMapper.updateById(planExecution);
 
-        // 同步更新计划表状态
-        if (PlanExecutionStatusEnum.COMPLETED.getCode().equals(planExecution.getStatus())) {
-            plan.setStatus(PlanStatusEnum.COMPLETED.getCode());
-            plan.setCompletedAt(LocalDateTime.now());
-        } else {
-            plan.setStatus(PlanStatusEnum.NOT_STARTED.getCode());
-            plan.setCompletedAt(null);
+        // 同步 Plan 表状态 (仅限 Type=2 每日计划)
+        if (PlanTypeEnum.DAILY.getCode().equals(plan.getType())) {
+            // Type=2 的任务，Execution 状态就是 Plan 状态
+            plan.setStatus(newStatus == 1 ? PlanStatusEnum.COMPLETED.getCode() : PlanStatusEnum.NOT_STARTED.getCode());
+            plan.setCompletedAt(newStatus == 1 ? LocalDateTime.now() : null);
+            planMapper.updateById(plan);
         }
-        planMapper.updateById(plan);
 
-        String action = PlanExecutionStatusEnum.COMPLETED.getCode().equals(planExecution.getStatus()) ? "完成" : "未完成";
-        log.info("每日计划状态切换成功, userId={}, planExecutionId={}, planId={}, status={}", userId, id, plan.getId(), action);
+        // Type=0 的普通计划，这里什么都不做。Plan 状态保持 "进行中(0)"。
+
+        log.info("状态切换成功 userId={}, planId={}, date={}, newStatus={}", userId, planId, executeDate, newStatus);
     }
 
     @Override
@@ -231,8 +260,9 @@ public class PlanExecutionServiceImpl extends ServiceImpl<PlanExecutionMapper, P
         // 处理重复计划
         processPlans(repeatPlanList, executeDate, planExecutionInfoRespList);
 
-        return planExecutionInfoRespList;
-    }
+        return planExecutionInfoRespList.stream()
+                .sorted(Comparator.comparing(PlanExecutionInfoResp::getStatus))
+                .collect(Collectors.toList());    }
 
     /**
      * 获取每日计划列表
@@ -291,10 +321,7 @@ public class PlanExecutionServiceImpl extends ServiceImpl<PlanExecutionMapper, P
      */
     private PlanExecutionInfoResp buildPlanExecutionResp(PlanEntity planEntity, LocalDate executeDate) {
         // 检查执行记录
-        LambdaQueryWrapper<PlanExecutionEntity> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(PlanExecutionEntity::getPlanId, planEntity.getId())
-                .eq(PlanExecutionEntity::getExecuteDate, executeDate);
-        PlanExecutionEntity planExecutionEntity = planExecutionMapper.selectOne(wrapper);
+        PlanExecutionEntity planExecutionEntity = planExecutionMapper.selectIgnoreLogicDelete(planEntity.getId(), executeDate);
 
         // 如果存在且已删除，则跳过
         if (planExecutionEntity != null && planExecutionEntity.getDeleted() == 1) {
@@ -311,7 +338,7 @@ public class PlanExecutionServiceImpl extends ServiceImpl<PlanExecutionMapper, P
         resp.setStatus(status);
 
         // 设置公共字段
-        resp.setPlanId(planEntity.getId());
+        resp.setId(planEntity.getId());
         resp.setPlanTitle(planEntity.getTitle());
         resp.setPlanType(planEntity.getType());
         resp.setPriority(planEntity.getPriority());

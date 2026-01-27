@@ -13,12 +13,12 @@ import java.time.LocalDateTime;
 public class PlanExecutionInfoResp {
 
     /**
-     * 每日清单ID
+     * 计划ID
      */
     private Long id;
 
     /**
-     * 计划ID
+     * TODO：待删除原先的该计划ID字段
      */
     private Long planId;
 
