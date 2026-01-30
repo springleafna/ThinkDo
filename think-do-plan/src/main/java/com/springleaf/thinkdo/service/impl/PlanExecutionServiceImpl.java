@@ -432,7 +432,7 @@ public class PlanExecutionServiceImpl extends ServiceImpl<PlanExecutionMapper, P
      * 判断某个配置了重复规则的计划在指定日期是否存在
      */
     public boolean isPlanActiveToday(PlanEntity plan, LocalDate targetDate) {
-        // 0. 确定“有效开始日期”,如果有 start_time，以 start_time 为准，如果没有 start_time，以 created_at (创建时间) 为准
+        // 1. 确定“有效开始日期”,如果有 start_time，以 start_time 为准，如果没有 start_time，以 created_at (创建时间) 为准
         LocalDate startDate;
         if (plan.getStartTime() != null) {
             startDate = plan.getStartTime().toLocalDate();
@@ -440,17 +440,10 @@ public class PlanExecutionServiceImpl extends ServiceImpl<PlanExecutionMapper, P
             startDate = plan.getCreatedAt().toLocalDate();
         }
 
-        // 1. 如果目标日期在开始日期之前，肯定不显示
+        // 2. 如果目标日期在开始日期之前，肯定不显示
         if (targetDate.isBefore(startDate)) {
             return false;
         }
-
-        /*// 2. 如果是不重复任务 (repeat_type = 0)
-        if (plan.getRepeatType() == 0) {
-            LocalDate dueDate = plan.getDueTime() != null ? plan.getDueTime().toLocalDate() : null;
-            // 如果有截止时间，targetDate 不能晚于 dueDate
-            return dueDate == null || !targetDate.isAfter(dueDate);
-        }*/
 
         // 3. 解析 JSON 配置 (Jackson)
         // 如果是重复任务但没有配置，默认不显示或根据业务逻辑容错
@@ -484,7 +477,6 @@ public class PlanExecutionServiceImpl extends ServiceImpl<PlanExecutionMapper, P
                 JsonNode daysNode = conf.get("days");
 
                 if (daysNode != null && daysNode.isArray()) {
-                    // Jackson 没有直接转 List 的简便方法，建议直接遍历 ArrayNode
                     for (JsonNode day : daysNode) {
                         if (day.asInt() == todayOfWeek) {
                             return true;
