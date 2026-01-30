@@ -1,5 +1,6 @@
 package com.springleaf.thinkdo.handler;
 
+import cn.dev33.satoken.exception.NotLoginException;
 import com.springleaf.thinkdo.common.Result;
 import com.springleaf.thinkdo.enums.ResultCodeEnum;
 import com.springleaf.thinkdo.exception.BusinessException;
@@ -9,13 +10,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.support.DefaultMessageSourceResolvable;
 import org.springframework.http.HttpStatus;
 import org.springframework.validation.BindException;
-import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-import java.util.List;
 import java.util.stream.Collectors;
 
 /**
@@ -71,6 +70,16 @@ public class GlobalExceptionHandler {
                 .collect(Collectors.joining("; "));
         log.warn("参数约束异常: {}", message);
         return Result.error(ResultCodeEnum.PARAM_ERROR.getCode(), message);
+    }
+
+    /**
+     * 处理 Sa-Token 未登录异常
+     */
+    @ExceptionHandler(NotLoginException.class)
+    @ResponseStatus(HttpStatus.UNAUTHORIZED)
+    public Result<?> handleNotLoginException(NotLoginException e) {
+        log.warn("未登录异常: {}", e.getMessage());
+        return Result.error(ResultCodeEnum.UNAUTHORIZED.getCode(), "登录已过期，请重新登录");
     }
 
     /**
