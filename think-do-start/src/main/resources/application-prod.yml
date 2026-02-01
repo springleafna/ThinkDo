@@ -2,3 +2,35 @@ spring:
   config:
     activate:
       on-profile: prod
+  datasource:
+    url: jdbc:mysql://${IP}:${MYSQL_PORT}/${MYSQL_DATABASE}?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: ${MYSQL_USERNAME}
+    password: ${MYSQL_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    type: com.zaxxer.hikari.HikariDataSource
+    hikari:
+      auto-commit: true
+      maximum-pool-size: 25
+      minimum-idle: 15
+      idle-timeout: 300000     # 5分钟（必须 < max-lifetime）
+      max-lifetime: 600000     # 10分钟
+      connection-timeout: 30000
+      validation-timeout: 5000  # 5秒，避免验证卡死
+      pool-name: mysqlHikariCP
+  data:
+    redis:
+      host: ${IP}
+      port: ${REDIS_POST}
+      password: ${REDIS_PASSWORD}
+      database: ${REDIS_DATABASE}
+      lettuce:
+        pool:
+          enabled: true
+          max-active: 8
+          max-idle: 8
+          min-idle: 2
+          time-between-eviction-runs: 30000     # 每30秒检查一次空闲连接
+          min-evictable-idle-time: 60000        # 连接空闲超过60秒可被回收
+          test-while-idle: true                 # 空闲时检测连接有效性
+          test-on-borrow: false                 # 借出时不检测（性能考虑）
+          test-on-create: false                 # 创建时不检测（性能考虑）

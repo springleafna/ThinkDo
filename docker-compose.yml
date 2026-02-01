@@ -1,0 +1,21 @@
+services:
+  thinkdo-app:
+    # 阿里云公网地址，加上 :latest 标签
+    image: crpi-uzhlbflj0lsdpu7g.cn-hangzhou.personal.cr.aliyuncs.com/springleafna/thinkdo:latest
+    container_name: thinkdo-springboot
+    ports:
+      - "8091:8091"
+    env_file:
+      - .env
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - TZ=Asia/Shanghai
+    volumes:
+      # 日志挂载路径
+      - /data/project/thinkdo/backend/logs:/app/logs
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"    # 每个日志文件最大 10MB
+        max-file: "3"      # 最多保留 3 个文件
