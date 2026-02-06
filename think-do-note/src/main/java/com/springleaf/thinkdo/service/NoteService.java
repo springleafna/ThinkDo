@@ -6,6 +6,7 @@ import com.springleaf.thinkdo.domain.request.CreateNoteReq;
 import com.springleaf.thinkdo.domain.request.NoteQueryReq;
 import com.springleaf.thinkdo.domain.request.UpdateNoteReq;
 import com.springleaf.thinkdo.domain.response.NoteInfoResp;
+import com.springleaf.thinkdo.domain.response.NoteStatisticsResp;
 
 import java.util.List;
 
@@ -66,4 +67,11 @@ public interface NoteService extends IService<NoteEntity> {
      * @param id 笔记ID
      */
     void toggleFavorited(Long id);
+
+    /**
+     * 获取笔记统计信息
+     *
+     * @return 统计信息
+     */
+    NoteStatisticsResp getStatistics();
 }

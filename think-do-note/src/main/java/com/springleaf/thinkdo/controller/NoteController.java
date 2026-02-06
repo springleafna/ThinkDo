@@ -5,6 +5,7 @@ import com.springleaf.thinkdo.domain.request.CreateNoteReq;
 import com.springleaf.thinkdo.domain.request.NoteQueryReq;
 import com.springleaf.thinkdo.domain.request.UpdateNoteReq;
 import com.springleaf.thinkdo.domain.response.NoteInfoResp;
+import com.springleaf.thinkdo.domain.response.NoteStatisticsResp;
 import com.springleaf.thinkdo.service.NoteService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -80,5 +81,13 @@ public class NoteController {
     public Result<Void> toggleFavorited(@PathVariable Long id) {
         noteService.toggleFavorited(id);
         return Result.success();
+    }
+
+    /**
+     * 获取笔记统计信息
+     */
+    @GetMapping("/statistics")
+    public Result<NoteStatisticsResp> getStatistics() {
+        return Result.success(noteService.getStatistics());
     }
 }

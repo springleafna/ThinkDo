@@ -1,7 +1,5 @@
 package com.springleaf.thinkdo.domain.request;
 
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
@@ -22,7 +20,6 @@ public class CreateNoteReq {
     /**
      * 笔记内容（Markdown格式）
      */
-    @NotBlank(message = "笔记内容不能为空")
     private String content;
 
     /**

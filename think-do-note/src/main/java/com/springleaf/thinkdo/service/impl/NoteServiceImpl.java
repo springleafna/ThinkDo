@@ -9,6 +9,7 @@ import com.springleaf.thinkdo.domain.request.CreateNoteReq;
 import com.springleaf.thinkdo.domain.request.NoteQueryReq;
 import com.springleaf.thinkdo.domain.request.UpdateNoteReq;
 import com.springleaf.thinkdo.domain.response.NoteInfoResp;
+import com.springleaf.thinkdo.domain.response.NoteStatisticsResp;
 import com.springleaf.thinkdo.enums.NoteFavoritedEnum;
 import com.springleaf.thinkdo.exception.BusinessException;
 import com.springleaf.thinkdo.mapper.NoteCategoryMapper;
@@ -236,6 +237,57 @@ public class NoteServiceImpl extends ServiceImpl<NoteMapper, NoteEntity> impleme
         note.setFavorited(newStatus.getCode());
         noteMapper.updateById(note);
         log.info("笔记{}成功, userId={}, noteId={}", newStatus.getDesc(), userId, id);
+    }
+
+    @Override
+    public NoteStatisticsResp getStatistics() {
+        Long userId = StpUtil.getLoginIdAsLong();
+
+        NoteStatisticsResp resp = new NoteStatisticsResp();
+
+        // 全部笔记数量
+        LambdaQueryWrapper<NoteEntity> totalWrapper = new LambdaQueryWrapper<>();
+        totalWrapper.eq(NoteEntity::getUserId, userId);
+        Long totalCount = noteMapper.selectCount(totalWrapper);
+        resp.setTotalCount(totalCount.intValue());
+
+        // 收藏笔记数量
+        LambdaQueryWrapper<NoteEntity> favoritedWrapper = new LambdaQueryWrapper<>();
+        favoritedWrapper.eq(NoteEntity::getUserId, userId);
+        favoritedWrapper.eq(NoteEntity::getFavorited, NoteFavoritedEnum.FAVORITED.getCode());
+        Long favoritedCount = noteMapper.selectCount(favoritedWrapper);
+        resp.setFavoritedCount(favoritedCount.intValue());
+
+        // 未分类笔记数量
+        LambdaQueryWrapper<NoteEntity> unclassifiedWrapper = new LambdaQueryWrapper<>();
+        unclassifiedWrapper.eq(NoteEntity::getUserId, userId);
+        unclassifiedWrapper.isNull(NoteEntity::getCategoryId);
+        Long unclassifiedCount = noteMapper.selectCount(unclassifiedWrapper);
+        resp.setUnclassifiedCount(unclassifiedCount.intValue());
+
+        // 获取所有分类
+        LambdaQueryWrapper<NoteCategoryEntity> categoryWrapper = new LambdaQueryWrapper<>();
+        categoryWrapper.eq(NoteCategoryEntity::getUserId, userId);
+        List<NoteCategoryEntity> categories = noteCategoryMapper.selectList(categoryWrapper);
+
+        // 各分类笔记数量
+        List<NoteStatisticsResp.CategoryCount> categoryCounts = categories.stream()
+                .map(category -> {
+                    LambdaQueryWrapper<NoteEntity> noteWrapper = new LambdaQueryWrapper<>();
+                    noteWrapper.eq(NoteEntity::getUserId, userId);
+                    noteWrapper.eq(NoteEntity::getCategoryId, category.getId());
+                    Long count = noteMapper.selectCount(noteWrapper);
+
+                    NoteStatisticsResp.CategoryCount categoryCount = new NoteStatisticsResp.CategoryCount();
+                    categoryCount.setCategoryId(category.getId());
+                    categoryCount.setCategoryName(category.getName());
+                    categoryCount.setCount(count.intValue());
+                    return categoryCount;
+                })
+                .collect(Collectors.toList());
+
+        resp.setCategoryCounts(categoryCounts);
+        return resp;
     }
 
     /**
