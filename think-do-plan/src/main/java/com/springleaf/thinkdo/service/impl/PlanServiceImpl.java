@@ -3,8 +3,10 @@ package com.springleaf.thinkdo.service.impl;
 import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.springleaf.thinkdo.domain.dto.AiPlanOutput;
 import com.springleaf.thinkdo.domain.entity.PlanCategoryEntity;
 import com.springleaf.thinkdo.domain.entity.PlanEntity;
+import com.springleaf.thinkdo.domain.entity.PlanStepEntity;
 import com.springleaf.thinkdo.domain.request.*;
 import com.springleaf.thinkdo.domain.response.PlanInfoResp;
 import com.springleaf.thinkdo.domain.response.PlanQuadrantResp;
@@ -17,6 +19,7 @@ import com.springleaf.thinkdo.enums.PlanTypeEnum;
 import com.springleaf.thinkdo.exception.BusinessException;
 import com.springleaf.thinkdo.mapper.PlanCategoryMapper;
 import com.springleaf.thinkdo.mapper.PlanMapper;
+import com.springleaf.thinkdo.mapper.PlanStepMapper;
 import com.springleaf.thinkdo.service.PlanCategoryService;
 import com.springleaf.thinkdo.service.PlanService;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +27,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.prompt.PromptTemplate;
+import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.beans.BeanUtils;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
@@ -34,8 +38,6 @@ import org.springframework.util.StringUtils;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -48,15 +50,17 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, PlanEntity> impleme
     private final PlanMapper planMapper;
     private final PlanCategoryMapper planCategoryMapper;
     private final PlanCategoryService planCategoryService;
+    private final PlanStepMapper planStepMapper;
     private final ChatClient chatClient;
     private final ResourceLoader resourceLoader;
 
     public PlanServiceImpl(PlanMapper planMapper, PlanCategoryMapper planCategoryMapper,
-                           PlanCategoryService planCategoryService, ChatClient.Builder builder,
-                           ResourceLoader resourceLoader) {
+                           PlanCategoryService planCategoryService, PlanStepMapper planStepMapper,
+                           ChatClient.Builder builder, ResourceLoader resourceLoader) {
         this.planMapper = planMapper;
         this.planCategoryMapper = planCategoryMapper;
         this.planCategoryService = planCategoryService;
+        this.planStepMapper = planStepMapper;
         this.chatClient = builder.build();
         this.resourceLoader = resourceLoader;
     }
@@ -133,6 +137,10 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, PlanEntity> impleme
                 .map(com.springleaf.thinkdo.domain.response.PlanCategoryInfoResp::getName)
                 .toList();
 
+        // 创建输出转换器
+        BeanOutputConverter<AiPlanOutput> outputConverter = new BeanOutputConverter<>(AiPlanOutput.class);
+        String formatInstructions = outputConverter.getFormat();
+
         // 加载提示词模板
         Resource resource = resourceLoader.getResource("classpath:prompts/create-plan.st");
         PromptTemplate promptTemplate = new PromptTemplate(resource);
@@ -144,6 +152,7 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, PlanEntity> impleme
         promptParameters.put("categories", String.join("、", userCategories));
         boolean hasType = aiCreatePlanReq.getType() != null;
         promptParameters.put("hasType", hasType);
+        promptParameters.put("format", formatInstructions);
 
         // 无论 hasType 是 true 还是 false，都必须初始化 typeDesc
         String typeDesc = "";
@@ -155,7 +164,6 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, PlanEntity> impleme
                 default -> "普通计划";
             };
         }
-        // 必须执行 put，哪怕是空字符串
         promptParameters.put("typeDesc", typeDesc);
 
         // 生成提示词
@@ -171,34 +179,22 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, PlanEntity> impleme
                 .content();
         log.info("AI生成的计划创建结果：\n{}", aiResponse);
 
-        // 解析AI响应并创建计划
-        return parseAiResponseAndCreatePlan(aiResponse, aiCreatePlanReq, userId, userCategories);
+        // 使用 BeanOutputConverter 解析响应
+        AiPlanOutput aiPlanOutput = outputConverter.convert(aiResponse);
+
+        // 创建计划并返回
+        return createPlanFromAiOutput(aiPlanOutput, aiCreatePlanReq, userId, userCategories);
     }
 
     /**
-     * 解析AI响应并创建计划
+     * 根据AI输出创建计划
      */
-    private Long parseAiResponseAndCreatePlan(String aiResponse, AiCreatePlanReq aiCreatePlanReq,
-                                               Long userId, List<String> userCategories) {
+    private Long createPlanFromAiOutput(AiPlanOutput aiPlanOutput, AiCreatePlanReq aiCreatePlanReq,
+                                        Long userId, List<String> userCategories) {
         try {
-            // 提取JSON（处理可能的markdown代码块）
-            String jsonContent = extractJson(aiResponse);
-
-            // 使用正则表达式解析各字段（避免引入JSON依赖）
-            String title = extractField(jsonContent, "title");
-            String description = extractField(jsonContent, "description");
-            String categoryName = extractField(jsonContent, "categoryName");
-            Integer type = null;
-            if (aiCreatePlanReq.getType() == null) {
-                type = parseIntegerField(jsonContent, "type", PlanTypeEnum.NORMAL.getCode());
-            }
-            Integer priority = parseIntegerField(jsonContent, "priority", PlanPriorityEnum.MEDIUM.getCode());
-            Integer quadrant = parseIntegerField(jsonContent, "quadrant", PlanQuadrantEnum.NONE.getCode());
-            String tags = extractField(jsonContent, "tags");
-            String startTimeStr = extractField(jsonContent, "startTime");
-            String dueTimeStr = extractField(jsonContent, "dueTime");
-
             // 验证必填字段
+            String title = aiPlanOutput.getTitle();
+            String description = aiPlanOutput.getDescription();
             if (!StringUtils.hasText(title)) {
                 title = truncateDescription(aiCreatePlanReq.getDescription(), 50);
             }
@@ -208,32 +204,51 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, PlanEntity> impleme
 
             // 处理分类：查找或创建
             Long categoryId = null;
-            if (StringUtils.hasText(categoryName)) {
-                categoryId = findOrCreateCategory(categoryName, userCategories);
+            if (StringUtils.hasText(aiPlanOutput.getCategoryName())) {
+                categoryId = findOrCreateCategory(aiPlanOutput.getCategoryName(), userCategories);
             }
 
-            // 解析时间
+            // 解析时间（支持 null 值）
             LocalDateTime startTime = null;
             LocalDateTime dueTime = null;
-            if (StringUtils.hasText(startTimeStr) && StringUtils.hasText(dueTimeStr)) {
+            if (StringUtils.hasText(aiPlanOutput.getStartTime()) && !"null".equals(aiPlanOutput.getStartTime()) &&
+                StringUtils.hasText(aiPlanOutput.getDueTime()) && !"null".equals(aiPlanOutput.getDueTime())) {
                 try {
-                    startTime = LocalDateTime.parse(startTimeStr.replace(" ", "T"));
-                    dueTime = LocalDateTime.parse(dueTimeStr.replace(" ", "T"));
+                    startTime = LocalDateTime.parse(aiPlanOutput.getStartTime().replace(" ", "T"));
+                    dueTime = LocalDateTime.parse(aiPlanOutput.getDueTime().replace(" ", "T"));
                 } catch (Exception e) {
-                    log.warn("解析时间失败，startTime: {}, dueTime: {}", startTimeStr, dueTimeStr);
+                    log.warn("解析时间失败，startTime: {}, dueTime: {}", aiPlanOutput.getStartTime(), aiPlanOutput.getDueTime());
                 }
+            }
+
+            // 确定计划类型
+            Integer type = aiPlanOutput.getType();
+            if (type == null) {
+                type = aiCreatePlanReq.getType() != null ? aiCreatePlanReq.getType() : PlanTypeEnum.NORMAL.getCode();
+            }
+
+            // 确定优先级
+            Integer priority = aiPlanOutput.getPriority();
+            if (priority == null) {
+                priority = PlanPriorityEnum.MEDIUM.getCode();
+            }
+
+            // 确定四象限
+            Integer quadrant = aiPlanOutput.getQuadrant();
+            if (quadrant == null) {
+                quadrant = PlanQuadrantEnum.NONE.getCode();
             }
 
             // 创建计划
             PlanEntity plan = new PlanEntity();
             plan.setUserId(userId);
-            plan.setType(type != null ? type : (aiCreatePlanReq.getType() != null ? aiCreatePlanReq.getType() : PlanTypeEnum.NORMAL.getCode()));
+            plan.setType(type);
             plan.setCategoryId(categoryId);
             plan.setTitle(title);
             plan.setDescription(description);
             plan.setPriority(priority);
             plan.setQuadrant(quadrant);
-            plan.setTags(tags);
+            plan.setTags(aiPlanOutput.getTags());
             plan.setStartTime(startTime);
             plan.setDueTime(dueTime);
             plan.setRepeatType(PlanRepeatTypeEnum.NONE.getCode());
@@ -242,11 +257,33 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, PlanEntity> impleme
             planMapper.insert(plan);
             log.info("AI创建计划成功, userId={}, planId={}, categoryId={}", userId, plan.getId(), categoryId);
 
+            // 创建子计划步骤
+            List<String> steps = aiPlanOutput.getSteps();
+            if (steps != null && !steps.isEmpty()) {
+                createPlanSteps(plan.getId(), steps);
+                log.info("AI创建计划步骤成功, planId={}, stepCount={}", plan.getId(), steps.size());
+            }
+
             return plan.getId();
 
         } catch (Exception e) {
-            log.error("解析AI响应失败: {}", aiResponse, e);
+            log.error("创建AI计划失败", e);
             throw new BusinessException("AI生成计划失败，请重试");
+        }
+    }
+
+    /**
+     * 批量创建计划步骤
+     */
+    private void createPlanSteps(Long planId, List<String> stepTitles) {
+        for (String stepTitle : stepTitles) {
+            if (StringUtils.hasText(stepTitle)) {
+                PlanStepEntity step = new PlanStepEntity();
+                step.setPlanId(planId);
+                step.setTitle(stepTitle.trim());
+                step.setStatus(PlanStatusEnum.NOT_STARTED.getCode());
+                planStepMapper.insert(step);
+            }
         }
     }
 
@@ -287,59 +324,6 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, PlanEntity> impleme
             log.warn("创建分类失败: {}", categoryName, e);
             return null;
         }
-    }
-
-    /**
-     * 从响应中提取JSON内容
-     */
-    private String extractJson(String response) {
-        String content = response.trim();
-
-        // 处理markdown代码块
-        if (content.startsWith("```")) {
-            int firstNewline = content.indexOf('\n');
-            int lastBackticks = content.lastIndexOf("```");
-            if (firstNewline > 0 && lastBackticks > firstNewline) {
-                content = content.substring(firstNewline + 1, lastBackticks).trim();
-            }
-        }
-
-        // 查找第一个{和最后一个}
-        int firstBrace = content.indexOf('{');
-        int lastBrace = content.lastIndexOf('}');
-        if (firstBrace >= 0 && lastBrace > firstBrace) {
-            content = content.substring(firstBrace, lastBrace + 1);
-        }
-
-        return content;
-    }
-
-    /**
-     * 从JSON中提取字符串字段
-     */
-    private String extractField(String json, String fieldName) {
-        Pattern pattern = Pattern.compile("\"" + fieldName + "\"\\s*:\\s*\"([^\"\\\\]*(?:\\\\.[^\"\\\\]*)*)\"");
-        Matcher matcher = pattern.matcher(json);
-        if (matcher.find()) {
-            return matcher.group(1).replace("\\\"", "\"").replace("\\\\", "\\");
-        }
-        return null;
-    }
-
-    /**
-     * 从JSON中提取整数字段
-     */
-    private Integer parseIntegerField(String json, String fieldName, Integer defaultValue) {
-        Pattern pattern = Pattern.compile("\"" + fieldName + "\"\\s*:\\s*(\\d+)");
-        Matcher matcher = pattern.matcher(json);
-        if (matcher.find()) {
-            try {
-                return Integer.parseInt(matcher.group(1));
-            } catch (NumberFormatException e) {
-                return defaultValue;
-            }
-        }
-        return defaultValue;
     }
 
     /**
