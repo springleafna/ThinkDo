@@ -5,10 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.springleaf.thinkdo.domain.entity.PlanCategoryEntity;
 import com.springleaf.thinkdo.domain.entity.PlanEntity;
-import com.springleaf.thinkdo.domain.request.CreatePlanReq;
-import com.springleaf.thinkdo.domain.request.CreateQuadrantPlanReq;
-import com.springleaf.thinkdo.domain.request.PlanQueryReq;
-import com.springleaf.thinkdo.domain.request.UpdatePlanReq;
+import com.springleaf.thinkdo.domain.request.*;
 import com.springleaf.thinkdo.domain.response.PlanInfoResp;
 import com.springleaf.thinkdo.domain.response.PlanQuadrantResp;
 import com.springleaf.thinkdo.domain.response.PlanQuadrantResp.PlanQuadrantInfoResp;
@@ -20,10 +17,16 @@ import com.springleaf.thinkdo.enums.PlanTypeEnum;
 import com.springleaf.thinkdo.exception.BusinessException;
 import com.springleaf.thinkdo.mapper.PlanCategoryMapper;
 import com.springleaf.thinkdo.mapper.PlanMapper;
+import com.springleaf.thinkdo.service.PlanCategoryService;
 import com.springleaf.thinkdo.service.PlanService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.beans.BeanUtils;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -31,6 +34,8 @@ import org.springframework.util.StringUtils;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -38,11 +43,23 @@ import java.util.stream.Collectors;
  */
 @Service
 @Slf4j
-@RequiredArgsConstructor
 public class PlanServiceImpl extends ServiceImpl<PlanMapper, PlanEntity> implements PlanService {
 
     private final PlanMapper planMapper;
     private final PlanCategoryMapper planCategoryMapper;
+    private final PlanCategoryService planCategoryService;
+    private final ChatClient chatClient;
+    private final ResourceLoader resourceLoader;
+
+    public PlanServiceImpl(PlanMapper planMapper, PlanCategoryMapper planCategoryMapper,
+                           PlanCategoryService planCategoryService, ChatClient.Builder builder,
+                           ResourceLoader resourceLoader) {
+        this.planMapper = planMapper;
+        this.planCategoryMapper = planCategoryMapper;
+        this.planCategoryService = planCategoryService;
+        this.chatClient = builder.build();
+        this.resourceLoader = resourceLoader;
+    }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -104,6 +121,239 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, PlanEntity> impleme
         log.info("创建计划成功, userId={}, planId={}", userId, plan.getId());
 
         return plan.getId();
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Long aiCreatePlan(AiCreatePlanReq aiCreatePlanReq) {
+        Long userId = StpUtil.getLoginIdAsLong();
+
+        // 获取用户现有分类列表
+        List<String> userCategories = planCategoryService.getCategoryList().stream()
+                .map(com.springleaf.thinkdo.domain.response.PlanCategoryInfoResp::getName)
+                .toList();
+
+        // 加载提示词模板
+        Resource resource = resourceLoader.getResource("classpath:prompts/create-plan.st");
+        PromptTemplate promptTemplate = new PromptTemplate(resource);
+
+        // 构建模板参数
+        Map<String, Object> promptParameters = new HashMap<>();
+        promptParameters.put("description", aiCreatePlanReq.getDescription());
+        promptParameters.put("userHasCategories", !userCategories.isEmpty());
+        promptParameters.put("categories", String.join("、", userCategories));
+        boolean hasType = aiCreatePlanReq.getType() != null;
+        promptParameters.put("hasType", hasType);
+
+        // 无论 hasType 是 true 还是 false，都必须初始化 typeDesc
+        String typeDesc = "";
+        if (hasType) {
+            typeDesc = switch (aiCreatePlanReq.getType()) {
+                case 0 -> "普通计划";
+                case 1 -> "四象限计划（重要紧急矩阵）";
+                case 2 -> "每日计划";
+                default -> "普通计划";
+            };
+        }
+        // 必须执行 put，哪怕是空字符串
+        promptParameters.put("typeDesc", typeDesc);
+
+        // 生成提示词
+        Prompt prompt = promptTemplate.create(promptParameters);
+
+        // 打印构建完成的提示词
+        String promptContent = prompt.getContents();
+        log.info("AI构建的计划创建提示词：\n{}", promptContent);
+
+        // 调用AI生成计划
+        String aiResponse = chatClient.prompt(prompt)
+                .call()
+                .content();
+        log.info("AI生成的计划创建结果：\n{}", aiResponse);
+
+        // 解析AI响应并创建计划
+        return parseAiResponseAndCreatePlan(aiResponse, aiCreatePlanReq, userId, userCategories);
+    }
+
+    /**
+     * 解析AI响应并创建计划
+     */
+    private Long parseAiResponseAndCreatePlan(String aiResponse, AiCreatePlanReq aiCreatePlanReq,
+                                               Long userId, List<String> userCategories) {
+        try {
+            // 提取JSON（处理可能的markdown代码块）
+            String jsonContent = extractJson(aiResponse);
+
+            // 使用正则表达式解析各字段（避免引入JSON依赖）
+            String title = extractField(jsonContent, "title");
+            String description = extractField(jsonContent, "description");
+            String categoryName = extractField(jsonContent, "categoryName");
+            Integer type = null;
+            if (aiCreatePlanReq.getType() == null) {
+                type = parseIntegerField(jsonContent, "type", PlanTypeEnum.NORMAL.getCode());
+            }
+            Integer priority = parseIntegerField(jsonContent, "priority", PlanPriorityEnum.MEDIUM.getCode());
+            Integer quadrant = parseIntegerField(jsonContent, "quadrant", PlanQuadrantEnum.NONE.getCode());
+            String tags = extractField(jsonContent, "tags");
+            String startTimeStr = extractField(jsonContent, "startTime");
+            String dueTimeStr = extractField(jsonContent, "dueTime");
+
+            // 验证必填字段
+            if (!StringUtils.hasText(title)) {
+                title = truncateDescription(aiCreatePlanReq.getDescription(), 50);
+            }
+            if (!StringUtils.hasText(description)) {
+                description = aiCreatePlanReq.getDescription();
+            }
+
+            // 处理分类：查找或创建
+            Long categoryId = null;
+            if (StringUtils.hasText(categoryName)) {
+                categoryId = findOrCreateCategory(categoryName, userCategories);
+            }
+
+            // 解析时间
+            LocalDateTime startTime = null;
+            LocalDateTime dueTime = null;
+            if (StringUtils.hasText(startTimeStr) && StringUtils.hasText(dueTimeStr)) {
+                try {
+                    startTime = LocalDateTime.parse(startTimeStr.replace(" ", "T"));
+                    dueTime = LocalDateTime.parse(dueTimeStr.replace(" ", "T"));
+                } catch (Exception e) {
+                    log.warn("解析时间失败，startTime: {}, dueTime: {}", startTimeStr, dueTimeStr);
+                }
+            }
+
+            // 创建计划
+            PlanEntity plan = new PlanEntity();
+            plan.setUserId(userId);
+            plan.setType(type != null ? type : (aiCreatePlanReq.getType() != null ? aiCreatePlanReq.getType() : PlanTypeEnum.NORMAL.getCode()));
+            plan.setCategoryId(categoryId);
+            plan.setTitle(title);
+            plan.setDescription(description);
+            plan.setPriority(priority);
+            plan.setQuadrant(quadrant);
+            plan.setTags(tags);
+            plan.setStartTime(startTime);
+            plan.setDueTime(dueTime);
+            plan.setRepeatType(PlanRepeatTypeEnum.NONE.getCode());
+            plan.setStatus(PlanStatusEnum.NOT_STARTED.getCode());
+
+            planMapper.insert(plan);
+            log.info("AI创建计划成功, userId={}, planId={}, categoryId={}", userId, plan.getId(), categoryId);
+
+            return plan.getId();
+
+        } catch (Exception e) {
+            log.error("解析AI响应失败: {}", aiResponse, e);
+            throw new BusinessException("AI生成计划失败，请重试");
+        }
+    }
+
+    /**
+     * 查找或创建分类
+     */
+    private Long findOrCreateCategory(String categoryName, List<String> userCategories) {
+        // 精确匹配现有分类
+        if (userCategories.contains(categoryName)) {
+            LambdaQueryWrapper<PlanCategoryEntity> wrapper = new LambdaQueryWrapper<>();
+            wrapper.eq(PlanCategoryEntity::getUserId, StpUtil.getLoginIdAsLong())
+                    .eq(PlanCategoryEntity::getName, categoryName);
+            PlanCategoryEntity category = planCategoryMapper.selectOne(wrapper);
+            if (category != null) {
+                return category.getId();
+            }
+        }
+
+        // 模糊匹配（处理可能的别名）
+        for (String existingCategory : userCategories) {
+            if (existingCategory.contains(categoryName) || categoryName.contains(existingCategory)) {
+                LambdaQueryWrapper<PlanCategoryEntity> wrapper = new LambdaQueryWrapper<>();
+                wrapper.eq(PlanCategoryEntity::getUserId, StpUtil.getLoginIdAsLong())
+                        .eq(PlanCategoryEntity::getName, existingCategory);
+                PlanCategoryEntity category = planCategoryMapper.selectOne(wrapper);
+                if (category != null) {
+                    return category.getId();
+                }
+            }
+        }
+
+        // 创建新分类
+        try {
+            CreatePlanCategoryReq createReq = new CreatePlanCategoryReq();
+            createReq.setName(categoryName);
+            return planCategoryService.createCategory(createReq);
+        } catch (Exception e) {
+            log.warn("创建分类失败: {}", categoryName, e);
+            return null;
+        }
+    }
+
+    /**
+     * 从响应中提取JSON内容
+     */
+    private String extractJson(String response) {
+        String content = response.trim();
+
+        // 处理markdown代码块
+        if (content.startsWith("```")) {
+            int firstNewline = content.indexOf('\n');
+            int lastBackticks = content.lastIndexOf("```");
+            if (firstNewline > 0 && lastBackticks > firstNewline) {
+                content = content.substring(firstNewline + 1, lastBackticks).trim();
+            }
+        }
+
+        // 查找第一个{和最后一个}
+        int firstBrace = content.indexOf('{');
+        int lastBrace = content.lastIndexOf('}');
+        if (firstBrace >= 0 && lastBrace > firstBrace) {
+            content = content.substring(firstBrace, lastBrace + 1);
+        }
+
+        return content;
+    }
+
+    /**
+     * 从JSON中提取字符串字段
+     */
+    private String extractField(String json, String fieldName) {
+        Pattern pattern = Pattern.compile("\"" + fieldName + "\"\\s*:\\s*\"([^\"\\\\]*(?:\\\\.[^\"\\\\]*)*)\"");
+        Matcher matcher = pattern.matcher(json);
+        if (matcher.find()) {
+            return matcher.group(1).replace("\\\"", "\"").replace("\\\\", "\\");
+        }
+        return null;
+    }
+
+    /**
+     * 从JSON中提取整数字段
+     */
+    private Integer parseIntegerField(String json, String fieldName, Integer defaultValue) {
+        Pattern pattern = Pattern.compile("\"" + fieldName + "\"\\s*:\\s*(\\d+)");
+        Matcher matcher = pattern.matcher(json);
+        if (matcher.find()) {
+            try {
+                return Integer.parseInt(matcher.group(1));
+            } catch (NumberFormatException e) {
+                return defaultValue;
+            }
+        }
+        return defaultValue;
+    }
+
+    /**
+     * 截断描述作为标题
+     */
+    private String truncateDescription(String description, int maxLength) {
+        if (description == null) {
+            return "未命名计划";
+        }
+        String truncated = description.length() > maxLength
+                ? description.substring(0, maxLength)
+                : description;
+        // 去除可能的换行符
+        return truncated.replaceAll("\\r?\\n", " ").trim();
     }
 
     @Override
