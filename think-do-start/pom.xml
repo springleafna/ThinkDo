@@ -43,6 +43,10 @@
             <groupId>com.springleaf</groupId>
             <artifactId>think-do-knowledge</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.springleaf</groupId>
+            <artifactId>think-do-ai</artifactId>
+        </dependency>
     </dependencies>
 
     <build>
