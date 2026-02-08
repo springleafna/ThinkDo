@@ -8,6 +8,7 @@ import com.springleaf.thinkdo.domain.entity.PlanCategoryEntity;
 import com.springleaf.thinkdo.domain.entity.PlanEntity;
 import com.springleaf.thinkdo.domain.entity.PlanStepEntity;
 import com.springleaf.thinkdo.domain.request.*;
+import com.springleaf.thinkdo.domain.response.PlanCategoryInfoResp;
 import com.springleaf.thinkdo.domain.response.PlanInfoResp;
 import com.springleaf.thinkdo.domain.response.PlanQuadrantResp;
 import com.springleaf.thinkdo.domain.response.PlanQuadrantResp.PlanQuadrantInfoResp;
@@ -133,8 +134,11 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, PlanEntity> impleme
         Long userId = StpUtil.getLoginIdAsLong();
 
         // 获取用户现有分类列表
-        List<String> userCategories = planCategoryService.getCategoryList().stream()
-                .map(com.springleaf.thinkdo.domain.response.PlanCategoryInfoResp::getName)
+        LambdaQueryWrapper<PlanCategoryEntity> categoryWrapper = new LambdaQueryWrapper<>();
+        categoryWrapper.eq(PlanCategoryEntity::getUserId, userId)
+                .select(PlanCategoryEntity::getName);
+        List<String> userCategories = planCategoryMapper.selectList(categoryWrapper).stream()
+                .map(PlanCategoryEntity::getName)
                 .toList();
 
         // 创建输出转换器
@@ -150,6 +154,8 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, PlanEntity> impleme
         promptParameters.put("description", aiCreatePlanReq.getDescription());
         promptParameters.put("userHasCategories", !userCategories.isEmpty());
         promptParameters.put("categories", String.join("、", userCategories));
+        promptParameters.put("currentDate", LocalDate.now().toString());
+        promptParameters.put("currentDayOfWeek", LocalDate.now().getDayOfWeek().toString());
         boolean hasType = aiCreatePlanReq.getType() != null;
         promptParameters.put("hasType", hasType);
         promptParameters.put("format", formatInstructions);
@@ -621,6 +627,7 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, PlanEntity> impleme
         LambdaQueryWrapper<PlanEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(PlanEntity::getUserId, userId)
                 .eq(PlanEntity::getCategoryId, categoryId)
+                .eq(PlanEntity::getType, PlanTypeEnum.NORMAL)
                 .orderByAsc(PlanEntity::getStatus)
                 .orderByDesc(PlanEntity::getPriority)
                 .orderByDesc(PlanEntity::getCreatedAt);
