@@ -54,6 +54,7 @@
         <jaxb-runtime.version>2.3.3</jaxb-runtime.version>
         <jbcrypt.version>0.4</jbcrypt.version>
         <spring-ai.version>1.1.2</spring-ai.version>
+        <jsoup.version>1.22.1</jsoup.version>
     </properties>
 
     <dependencyManagement>
@@ -177,6 +178,13 @@
                 <version>${spring-ai.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+
+            <dependency>
+                <groupId>org.jsoup</groupId>
+                <artifactId>jsoup</artifactId>
+                <version>${jsoup.version}</version>
+                <scope>compile</scope>
             </dependency>
         </dependencies>
     </dependencyManagement>

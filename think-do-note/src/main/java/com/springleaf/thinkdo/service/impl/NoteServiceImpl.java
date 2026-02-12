@@ -9,6 +9,7 @@ import com.springleaf.thinkdo.domain.request.CreateNoteReq;
 import com.springleaf.thinkdo.domain.request.NoteQueryReq;
 import com.springleaf.thinkdo.domain.request.UpdateNoteReq;
 import com.springleaf.thinkdo.domain.response.NoteInfoResp;
+import com.springleaf.thinkdo.domain.response.NoteListItemResp;
 import com.springleaf.thinkdo.domain.response.NoteStatisticsResp;
 import com.springleaf.thinkdo.enums.NoteFavoritedEnum;
 import com.springleaf.thinkdo.exception.BusinessException;
@@ -17,6 +18,7 @@ import com.springleaf.thinkdo.mapper.NoteMapper;
 import com.springleaf.thinkdo.service.NoteService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jsoup.Jsoup;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -51,6 +53,7 @@ public class NoteServiceImpl extends ServiceImpl<NoteMapper, NoteEntity> impleme
         note.setUserId(userId);
         note.setTitle(createNoteReq.getTitle());
         note.setContent(createNoteReq.getContent());
+        note.setPreview(generatePreview(createNoteReq.getContent()));
         note.setCategoryId(createNoteReq.getCategoryId());
         note.setTags(createNoteReq.getTags());
 
@@ -84,8 +87,9 @@ public class NoteServiceImpl extends ServiceImpl<NoteMapper, NoteEntity> impleme
         if (StringUtils.hasText(updateNoteReq.getTitle())) {
             note.setTitle(updateNoteReq.getTitle());
         }
-        if (StringUtils.hasText(updateNoteReq.getContent())) {
+        if (updateNoteReq.getContent() != null) {
             note.setContent(updateNoteReq.getContent());
+            note.setPreview(generatePreview(updateNoteReq.getContent()));
         }
         if (updateNoteReq.getCategoryId() != null) {
             note.setCategoryId(updateNoteReq.getCategoryId());
@@ -135,7 +139,7 @@ public class NoteServiceImpl extends ServiceImpl<NoteMapper, NoteEntity> impleme
     }
 
     @Override
-    public List<NoteInfoResp> getNoteList(NoteQueryReq queryReq) {
+    public List<NoteListItemResp> getNoteList(NoteQueryReq queryReq) {
         Long userId = StpUtil.getLoginIdAsLong();
 
         LambdaQueryWrapper<NoteEntity> wrapper = new LambdaQueryWrapper<>();
@@ -186,7 +190,7 @@ public class NoteServiceImpl extends ServiceImpl<NoteMapper, NoteEntity> impleme
         Map<Long, String> finalCategoryNameMap = categoryNameMap;
         return noteList.stream()
                 .map(note -> {
-                    NoteInfoResp resp = convertToResp(note);
+                    NoteListItemResp resp = convertToListItemResp(note);
                     if (note.getCategoryId() != null) {
                         resp.setCategoryName(finalCategoryNameMap.get(note.getCategoryId()));
                     }
@@ -196,7 +200,7 @@ public class NoteServiceImpl extends ServiceImpl<NoteMapper, NoteEntity> impleme
     }
 
     @Override
-    public List<NoteInfoResp> searchNotes(String keyword) {
+    public List<NoteListItemResp> searchNotes(String keyword) {
         if (!StringUtils.hasText(keyword)) {
             return List.of();
         }
@@ -212,7 +216,7 @@ public class NoteServiceImpl extends ServiceImpl<NoteMapper, NoteEntity> impleme
 
         List<NoteEntity> noteList = noteMapper.selectList(wrapper);
         return noteList.stream()
-                .map(this::convertToResp)
+                .map(this::convertToListItemResp)
                 .collect(Collectors.toList());
     }
 
@@ -310,5 +314,37 @@ public class NoteServiceImpl extends ServiceImpl<NoteMapper, NoteEntity> impleme
         NoteInfoResp resp = new NoteInfoResp();
         BeanUtils.copyProperties(note, resp);
         return resp;
+    }
+
+    /**
+     * 转换为列表项响应对象
+     */
+    private NoteListItemResp convertToListItemResp(NoteEntity note) {
+        NoteListItemResp resp = new NoteListItemResp();
+        resp.setId(note.getId());
+        resp.setTitle(note.getTitle());
+        resp.setPreview(note.getPreview());
+        resp.setCategoryId(note.getCategoryId());
+        resp.setTags(note.getTags());
+        resp.setFavorited(note.getFavorited());
+        resp.setCreatedAt(note.getCreatedAt());
+        resp.setUpdatedAt(note.getUpdatedAt());
+        return resp;
+    }
+
+    /**
+     * 生成预览内容（去除HTML标签，截取前100个字符）
+     */
+    private String generatePreview(String content) {
+        if (!StringUtils.hasText(content)) {
+            return null;
+        }
+        // 使用 Jsoup 去除 HTML 标签
+        String plainText = Jsoup.parse(content).text();
+        // 截取前100个字符
+        if (plainText.length() > 100) {
+            return plainText.substring(0, 100);
+        }
+        return plainText;
     }
 }

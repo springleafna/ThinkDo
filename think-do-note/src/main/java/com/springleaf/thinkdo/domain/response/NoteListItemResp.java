@@ -5,10 +5,10 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * 笔记信息Response
+ * 笔记列表项Response
  */
 @Data
-public class NoteInfoResp {
+public class NoteListItemResp {
 
     /**
      * 笔记ID
@@ -19,11 +19,6 @@ public class NoteInfoResp {
      * 笔记标题
      */
     private String title;
-
-    /**
-     * 笔记内容
-     */
-    private String content;
 
     /**
      * 笔记预览（纯文本前100字符）

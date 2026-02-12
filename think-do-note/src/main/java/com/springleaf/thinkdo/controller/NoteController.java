@@ -5,6 +5,7 @@ import com.springleaf.thinkdo.domain.request.CreateNoteReq;
 import com.springleaf.thinkdo.domain.request.NoteQueryReq;
 import com.springleaf.thinkdo.domain.request.UpdateNoteReq;
 import com.springleaf.thinkdo.domain.response.NoteInfoResp;
+import com.springleaf.thinkdo.domain.response.NoteListItemResp;
 import com.springleaf.thinkdo.domain.response.NoteStatisticsResp;
 import com.springleaf.thinkdo.service.NoteService;
 import jakarta.validation.Valid;
@@ -62,7 +63,7 @@ public class NoteController {
      * 获取笔记列表
      */
     @GetMapping("/list")
-    public Result<List<NoteInfoResp>> getNoteList(NoteQueryReq queryReq) {
+    public Result<List<NoteListItemResp>> getNoteList(NoteQueryReq queryReq) {
         return Result.success(noteService.getNoteList(queryReq));
     }
 
@@ -70,7 +71,7 @@ public class NoteController {
      * 根据笔记内容搜索笔记
      */
     @GetMapping("/search")
-    public Result<List<NoteInfoResp>> searchNotes(@RequestParam String keyword) {
+    public Result<List<NoteListItemResp>> searchNotes(@RequestParam String keyword) {
         return Result.success(noteService.searchNotes(keyword));
     }
 

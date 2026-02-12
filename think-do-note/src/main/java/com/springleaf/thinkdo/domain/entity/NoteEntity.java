@@ -34,6 +34,11 @@ public class NoteEntity {
     private String content;
 
     /**
+     * 笔记预览（纯文本前100字符）
+     */
+    private String preview;
+
+    /**
      * 分类ID（关联tb_note_category表），NULL表示未分类
      */
     private Long categoryId;

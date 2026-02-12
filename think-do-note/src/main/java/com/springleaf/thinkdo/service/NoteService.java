@@ -6,6 +6,7 @@ import com.springleaf.thinkdo.domain.request.CreateNoteReq;
 import com.springleaf.thinkdo.domain.request.NoteQueryReq;
 import com.springleaf.thinkdo.domain.request.UpdateNoteReq;
 import com.springleaf.thinkdo.domain.response.NoteInfoResp;
+import com.springleaf.thinkdo.domain.response.NoteListItemResp;
 import com.springleaf.thinkdo.domain.response.NoteStatisticsResp;
 
 import java.util.List;
@@ -51,7 +52,7 @@ public interface NoteService extends IService<NoteEntity> {
      * @param queryReq 查询条件
      * @return 笔记列表
      */
-    List<NoteInfoResp> getNoteList(NoteQueryReq queryReq);
+    List<NoteListItemResp> getNoteList(NoteQueryReq queryReq);
 
     /**
      * 根据笔记内容搜索笔记
@@ -59,7 +60,7 @@ public interface NoteService extends IService<NoteEntity> {
      * @param keyword 搜索关键词
      * @return 笔记列表
      */
-    List<NoteInfoResp> searchNotes(String keyword);
+    List<NoteListItemResp> searchNotes(String keyword);
 
     /**
      * 切换笔记收藏状态
