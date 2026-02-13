@@ -5,27 +5,33 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.springleaf.thinkdo.domain.entity.NoteCategoryEntity;
 import com.springleaf.thinkdo.domain.entity.NoteEntity;
-import com.springleaf.thinkdo.domain.request.CreateNoteReq;
-import com.springleaf.thinkdo.domain.request.NoteQueryReq;
-import com.springleaf.thinkdo.domain.request.UpdateNoteReq;
+import com.springleaf.thinkdo.domain.request.*;
 import com.springleaf.thinkdo.domain.response.NoteInfoResp;
 import com.springleaf.thinkdo.domain.response.NoteListItemResp;
 import com.springleaf.thinkdo.domain.response.NoteStatisticsResp;
+import com.springleaf.thinkdo.enums.AiActionEnum;
 import com.springleaf.thinkdo.enums.NoteFavoritedEnum;
 import com.springleaf.thinkdo.exception.BusinessException;
 import com.springleaf.thinkdo.mapper.NoteCategoryMapper;
 import com.springleaf.thinkdo.mapper.NoteMapper;
 import com.springleaf.thinkdo.service.NoteService;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
+import org.jsoup.safety.Safelist;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.beans.BeanUtils;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import reactor.core.publisher.Flux;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -33,11 +39,19 @@ import java.util.stream.Collectors;
  */
 @Service
 @Slf4j
-@RequiredArgsConstructor
 public class NoteServiceImpl extends ServiceImpl<NoteMapper, NoteEntity> implements NoteService {
 
     private final NoteMapper noteMapper;
     private final NoteCategoryMapper noteCategoryMapper;
+    private final ChatClient chatClient;
+    private final ResourceLoader resourceLoader;
+
+    public NoteServiceImpl(NoteMapper noteMapper, NoteCategoryMapper noteCategoryMapper, ChatClient.Builder builder, ResourceLoader resourceLoader) {
+        this.noteMapper = noteMapper;
+        this.noteCategoryMapper = noteCategoryMapper;
+        this.chatClient = builder.build();
+        this.resourceLoader = resourceLoader;
+    }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -346,5 +360,72 @@ public class NoteServiceImpl extends ServiceImpl<NoteMapper, NoteEntity> impleme
             return plainText.substring(0, 100);
         }
         return plainText;
+    }
+
+    @Override
+    public Flux<String> aiTransformStream(AiTransformReq req) {
+        PromptTemplate template = new PromptTemplate(selectTemplate(req.getAction()));
+        Map<String, Object> params = buildParams(req);
+        Prompt prompt = template.create(params);
+
+        boolean isFormat = req.getAction() == AiActionEnum.FORMAT;
+
+        Flux<String> contentStream = chatClient.prompt(prompt)
+                .stream()
+                .content();
+
+        // FORMAT 操作需要清理 HTML
+        if (isFormat) {
+            return contentStream.map(this::sanitizeHtml);
+        }
+        return contentStream;
+    }
+
+    /**
+     * 构建提示词参数
+     */
+    private Map<String, Object> buildParams(AiTransformReq req) {
+        String tone = Optional.ofNullable(req.getOptions())
+                .map(AiOptions::getTone)
+                .orElse("neutral");
+
+        String length = Optional.ofNullable(req.getOptions())
+                .map(AiOptions::getTargetLength)
+                .orElse("medium");
+
+        String language = Optional.ofNullable(req.getOptions())
+                .map(AiOptions::getLanguage)
+                .orElse("zh");
+
+        return Map.of(
+                "text", req.getText(),
+                "tone", tone,
+                "length", length,
+                "language", language
+        );
+    }
+
+    /**
+     * 根据操作类型选择对应的提示词模板
+     */
+    private Resource selectTemplate(AiActionEnum action) {
+        return switch (action) {
+            case POLISH -> resourceLoader.getResource("classpath:prompts/ai-polish.st");
+            case EXPAND -> resourceLoader.getResource("classpath:prompts/ai-expand.st");
+            case CORRECT -> resourceLoader.getResource("classpath:prompts/ai-correct.st");
+            case FORMAT -> resourceLoader.getResource("classpath:prompts/ai-format.st");
+        };
+    }
+
+    /**
+     * 清理HTML，只保留安全的标签和属性
+     */
+    private String sanitizeHtml(String html) {
+        Safelist safelist = Safelist.none()
+                .addTags("h1", "h2", "h3", "p", "ul", "ol",
+                        "li", "blockquote", "code", "pre", "a",
+                        "strong", "em", "del")
+                .addAttributes("a", "href");
+        return Jsoup.clean(html, safelist);
     }
 }

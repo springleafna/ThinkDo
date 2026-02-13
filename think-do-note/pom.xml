@@ -31,6 +31,10 @@
             <artifactId>jsoup</artifactId>
             <scope>compile</scope>
         </dependency>
+        <dependency>
+            <groupId>com.springleaf</groupId>
+            <artifactId>think-do-ai</artifactId>
+        </dependency>
     </dependencies>
 
 </project>

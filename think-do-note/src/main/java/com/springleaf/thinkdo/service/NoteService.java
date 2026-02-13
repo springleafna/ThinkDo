@@ -2,12 +2,14 @@ package com.springleaf.thinkdo.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.springleaf.thinkdo.domain.entity.NoteEntity;
+import com.springleaf.thinkdo.domain.request.AiTransformReq;
 import com.springleaf.thinkdo.domain.request.CreateNoteReq;
 import com.springleaf.thinkdo.domain.request.NoteQueryReq;
 import com.springleaf.thinkdo.domain.request.UpdateNoteReq;
 import com.springleaf.thinkdo.domain.response.NoteInfoResp;
 import com.springleaf.thinkdo.domain.response.NoteListItemResp;
 import com.springleaf.thinkdo.domain.response.NoteStatisticsResp;
+import reactor.core.publisher.Flux;
 
 import java.util.List;
 
@@ -75,4 +77,12 @@ public interface NoteService extends IService<NoteEntity> {
      * @return 统计信息
      */
     NoteStatisticsResp getStatistics();
+
+    /**
+     * AI流式转换文本
+     *
+     * @param req 转换请求
+     * @return 流式响应
+     */
+    Flux<String> aiTransformStream(AiTransformReq req);
 }
