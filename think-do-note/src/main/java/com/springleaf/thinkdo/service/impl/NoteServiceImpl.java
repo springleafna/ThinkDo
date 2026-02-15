@@ -41,6 +41,32 @@ import java.util.stream.Collectors;
 @Slf4j
 public class NoteServiceImpl extends ServiceImpl<NoteMapper, NoteEntity> implements NoteService {
 
+
+    /** 提示词模板路径前缀 */
+    private static final String PROMPT_TEMPLATE_PREFIX = "classpath:prompts/ai-";
+
+    /** 提示词模板路径后缀 */
+    private static final String PROMPT_TEMPLATE_SUFFIX = ".st";
+
+    /** HTML 安全标签白名单 */
+    private static final String[] SAFE_HTML_TAGS = {"h1", "h2", "h3", "p", "ul", "ol",
+            "li", "blockquote", "code", "pre", "a", "strong", "em", "del"};
+
+    /** HTML 安全属性白名单（格式：标签名:属性名） */
+    private static final String[][] SAFE_HTML_ATTRIBUTES = {{"a", "href"}};
+
+    /** 默认语气 */
+    private static final String DEFAULT_TONE = "neutral";
+
+    /** 默认扩写程度 */
+    private static final String DEFAULT_LENGTH = "medium";
+
+    /** 默认语言 */
+    private static final String DEFAULT_LANGUAGE = "zh";
+
+    /** 预览内容最大长度 */
+    private static final int PREVIEW_MAX_LENGTH = 100;
+
     private final NoteMapper noteMapper;
     private final NoteCategoryMapper noteCategoryMapper;
     private final ChatClient chatClient;
@@ -308,6 +334,69 @@ public class NoteServiceImpl extends ServiceImpl<NoteMapper, NoteEntity> impleme
         return resp;
     }
 
+    @Override
+    public Flux<String> aiTransformStream(AiTransformReq req) {
+        PromptTemplate template = new PromptTemplate(selectTemplate(req.getAction()));
+        Map<String, Object> params = buildParams(req);
+        Prompt prompt = template.create(params);
+
+        boolean isFormat = req.getAction() == AiActionEnum.FORMAT;
+
+        Flux<String> contentStream = chatClient.prompt(prompt)
+                .stream()
+                .content();
+
+        // FORMAT 操作需要清理 HTML
+        if (isFormat) {
+            return contentStream.map(this::sanitizeHtml);
+        }
+        return contentStream;
+    }
+
+    /**
+     * 构建提示词参数
+     */
+    private Map<String, Object> buildParams(AiTransformReq req) {
+        String tone = Optional.ofNullable(req.getOptions())
+                .map(AiOptions::getTone)
+                .orElse(DEFAULT_TONE);
+
+        String length = Optional.ofNullable(req.getOptions())
+                .map(AiOptions::getTargetLength)
+                .orElse(DEFAULT_LENGTH);
+
+        String language = Optional.ofNullable(req.getOptions())
+                .map(AiOptions::getLanguage)
+                .orElse(DEFAULT_LANGUAGE);
+
+        return Map.of(
+                "text", req.getText(),
+                "tone", tone,
+                "length", length,
+                "language", language
+        );
+    }
+
+    /**
+     * 根据操作类型选择对应的提示词模板
+     */
+    private Resource selectTemplate(AiActionEnum action) {
+        String templatePath = PROMPT_TEMPLATE_PREFIX + action.name().toLowerCase() + PROMPT_TEMPLATE_SUFFIX;
+        return resourceLoader.getResource(templatePath);
+    }
+
+    /**
+     * 清理HTML，只保留安全的标签和属性
+     */
+    private String sanitizeHtml(String html) {
+        Safelist safelist = new Safelist();
+        safelist.addTags(SAFE_HTML_TAGS);
+        for (String[] attr : SAFE_HTML_ATTRIBUTES) {
+            safelist.addAttributes(attr[0], attr[1]);
+        }
+        return Jsoup.clean(html, safelist);
+    }
+
     /**
      * 验证分类所有权
      */
@@ -347,7 +436,7 @@ public class NoteServiceImpl extends ServiceImpl<NoteMapper, NoteEntity> impleme
     }
 
     /**
-     * 生成预览内容（去除HTML标签，截取前100个字符）
+     * 生成预览内容（去除HTML标签，截取前N个字符）
      */
     private String generatePreview(String content) {
         if (!StringUtils.hasText(content)) {
@@ -355,77 +444,51 @@ public class NoteServiceImpl extends ServiceImpl<NoteMapper, NoteEntity> impleme
         }
         // 使用 Jsoup 去除 HTML 标签
         String plainText = Jsoup.parse(content).text();
-        // 截取前100个字符
-        if (plainText.length() > 100) {
-            return plainText.substring(0, 100);
+        // 截取前N个字符
+        if (plainText.length() > PREVIEW_MAX_LENGTH) {
+            return plainText.substring(0, PREVIEW_MAX_LENGTH);
         }
         return plainText;
     }
 
     @Override
-    public Flux<String> aiTransformStream(AiTransformReq req) {
-        PromptTemplate template = new PromptTemplate(selectTemplate(req.getAction()));
-        Map<String, Object> params = buildParams(req);
-        Prompt prompt = template.create(params);
+    public List<NoteListItemResp> getRecentNotes() {
+        Long userId = StpUtil.getLoginIdAsLong();
 
-        boolean isFormat = req.getAction() == AiActionEnum.FORMAT;
+        LambdaQueryWrapper<NoteEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(NoteEntity::getUserId, userId);
+        wrapper.orderByDesc(NoteEntity::getUpdatedAt);
+        wrapper.last("LIMIT 2");
 
-        Flux<String> contentStream = chatClient.prompt(prompt)
-                .stream()
-                .content();
+        List<NoteEntity> noteList = noteMapper.selectList(wrapper);
 
-        // FORMAT 操作需要清理 HTML
-        if (isFormat) {
-            return contentStream.map(this::sanitizeHtml);
+        // 批量获取分类名称
+        List<Long> categoryIds = noteList.stream()
+                .map(NoteEntity::getCategoryId)
+                .filter(id -> id != null)
+                .distinct()
+                .toList();
+
+        Map<Long, String> categoryNameMap = Map.of();
+        if (!categoryIds.isEmpty()) {
+            LambdaQueryWrapper<NoteCategoryEntity> categoryWrapper = new LambdaQueryWrapper<>();
+            categoryWrapper.in(NoteCategoryEntity::getId, categoryIds);
+            categoryWrapper.eq(NoteCategoryEntity::getUserId, userId);
+            categoryWrapper.select(NoteCategoryEntity::getId, NoteCategoryEntity::getName);
+            List<NoteCategoryEntity> categories = noteCategoryMapper.selectList(categoryWrapper);
+            categoryNameMap = categories.stream()
+                    .collect(Collectors.toMap(NoteCategoryEntity::getId, NoteCategoryEntity::getName));
         }
-        return contentStream;
-    }
 
-    /**
-     * 构建提示词参数
-     */
-    private Map<String, Object> buildParams(AiTransformReq req) {
-        String tone = Optional.ofNullable(req.getOptions())
-                .map(AiOptions::getTone)
-                .orElse("neutral");
-
-        String length = Optional.ofNullable(req.getOptions())
-                .map(AiOptions::getTargetLength)
-                .orElse("medium");
-
-        String language = Optional.ofNullable(req.getOptions())
-                .map(AiOptions::getLanguage)
-                .orElse("zh");
-
-        return Map.of(
-                "text", req.getText(),
-                "tone", tone,
-                "length", length,
-                "language", language
-        );
-    }
-
-    /**
-     * 根据操作类型选择对应的提示词模板
-     */
-    private Resource selectTemplate(AiActionEnum action) {
-        return switch (action) {
-            case POLISH -> resourceLoader.getResource("classpath:prompts/ai-polish.st");
-            case EXPAND -> resourceLoader.getResource("classpath:prompts/ai-expand.st");
-            case CORRECT -> resourceLoader.getResource("classpath:prompts/ai-correct.st");
-            case FORMAT -> resourceLoader.getResource("classpath:prompts/ai-format.st");
-        };
-    }
-
-    /**
-     * 清理HTML，只保留安全的标签和属性
-     */
-    private String sanitizeHtml(String html) {
-        Safelist safelist = Safelist.none()
-                .addTags("h1", "h2", "h3", "p", "ul", "ol",
-                        "li", "blockquote", "code", "pre", "a",
-                        "strong", "em", "del")
-                .addAttributes("a", "href");
-        return Jsoup.clean(html, safelist);
+        Map<Long, String> finalCategoryNameMap = categoryNameMap;
+        return noteList.stream()
+                .map(note -> {
+                    NoteListItemResp resp = convertToListItemResp(note);
+                    if (note.getCategoryId() != null) {
+                        resp.setCategoryName(finalCategoryNameMap.get(note.getCategoryId()));
+                    }
+                    return resp;
+                })
+                .collect(Collectors.toList());
     }
 }

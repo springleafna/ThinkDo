@@ -85,4 +85,11 @@ public interface NoteService extends IService<NoteEntity> {
      * @return 流式响应
      */
     Flux<String> aiTransformStream(AiTransformReq req);
+
+    /**
+     * 获取最近修改的笔记
+     *
+     * @return 最近修改的两条笔记
+     */
+    List<NoteListItemResp> getRecentNotes();
 }

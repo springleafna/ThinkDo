@@ -118,4 +118,12 @@ public class NoteController {
                         .data(AiStreamChunkResp.done(isHtml))
                         .build()));
     }
+
+    /**
+     * 获取最近修改的两条笔记，用于展示在前端控制台页面
+     */
+    @GetMapping("/recent")
+    public Result<List<NoteListItemResp>> getRecentNotes() {
+        return Result.success(noteService.getRecentNotes());
+    }
 }

@@ -25,5 +25,12 @@ public class MybatisPlusMetaObjectHandler implements MetaObjectHandler {
     public void updateFill(MetaObject metaObject) {
         log.debug("开始更新填充...");
         this.strictUpdateFill(metaObject, "updatedAt", LocalDateTime.class, LocalDateTime.now());
+        // 兼容属性名可能是 updatedAt 或 updateTime
+        if (metaObject.hasSetter("updatedAt")) {
+            this.setFieldValByName("updatedAt", LocalDateTime.now(), metaObject);
+        }
+        if (metaObject.hasSetter("updateTime")) {
+            this.setFieldValByName("updateTime", LocalDateTime.now(), metaObject);
+        }
     }
 }
