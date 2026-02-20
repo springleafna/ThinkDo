@@ -3,12 +3,12 @@ package com.springleaf.thinkdo.service.impl;
 import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.springleaf.thinkdo.domain.dto.AiPlanOutput;
 import com.springleaf.thinkdo.domain.entity.PlanCategoryEntity;
 import com.springleaf.thinkdo.domain.entity.PlanEntity;
-import com.springleaf.thinkdo.domain.request.CreatePlanReq;
-import com.springleaf.thinkdo.domain.request.CreateQuadrantPlanReq;
-import com.springleaf.thinkdo.domain.request.PlanQueryReq;
-import com.springleaf.thinkdo.domain.request.UpdatePlanReq;
+import com.springleaf.thinkdo.domain.entity.PlanStepEntity;
+import com.springleaf.thinkdo.domain.request.*;
+import com.springleaf.thinkdo.domain.response.PlanCategoryInfoResp;
 import com.springleaf.thinkdo.domain.response.PlanInfoResp;
 import com.springleaf.thinkdo.domain.response.PlanQuadrantResp;
 import com.springleaf.thinkdo.domain.response.PlanQuadrantResp.PlanQuadrantInfoResp;
@@ -20,10 +20,18 @@ import com.springleaf.thinkdo.enums.PlanTypeEnum;
 import com.springleaf.thinkdo.exception.BusinessException;
 import com.springleaf.thinkdo.mapper.PlanCategoryMapper;
 import com.springleaf.thinkdo.mapper.PlanMapper;
+import com.springleaf.thinkdo.mapper.PlanStepMapper;
+import com.springleaf.thinkdo.service.PlanCategoryService;
 import com.springleaf.thinkdo.service.PlanService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.chat.prompt.PromptTemplate;
+import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.beans.BeanUtils;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -38,11 +46,25 @@ import java.util.stream.Collectors;
  */
 @Service
 @Slf4j
-@RequiredArgsConstructor
 public class PlanServiceImpl extends ServiceImpl<PlanMapper, PlanEntity> implements PlanService {
 
     private final PlanMapper planMapper;
     private final PlanCategoryMapper planCategoryMapper;
+    private final PlanCategoryService planCategoryService;
+    private final PlanStepMapper planStepMapper;
+    private final ChatClient chatClient;
+    private final ResourceLoader resourceLoader;
+
+    public PlanServiceImpl(PlanMapper planMapper, PlanCategoryMapper planCategoryMapper,
+                           PlanCategoryService planCategoryService, PlanStepMapper planStepMapper,
+                           ChatClient.Builder builder, ResourceLoader resourceLoader) {
+        this.planMapper = planMapper;
+        this.planCategoryMapper = planCategoryMapper;
+        this.planCategoryService = planCategoryService;
+        this.planStepMapper = planStepMapper;
+        this.chatClient = builder.build();
+        this.resourceLoader = resourceLoader;
+    }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -104,6 +126,224 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, PlanEntity> impleme
         log.info("创建计划成功, userId={}, planId={}", userId, plan.getId());
 
         return plan.getId();
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Long aiCreatePlan(AiCreatePlanReq aiCreatePlanReq) {
+        Long userId = StpUtil.getLoginIdAsLong();
+
+        // 获取用户现有分类列表
+        LambdaQueryWrapper<PlanCategoryEntity> categoryWrapper = new LambdaQueryWrapper<>();
+        categoryWrapper.eq(PlanCategoryEntity::getUserId, userId)
+                .select(PlanCategoryEntity::getName);
+        List<String> userCategories = planCategoryMapper.selectList(categoryWrapper).stream()
+                .map(PlanCategoryEntity::getName)
+                .toList();
+
+        // 创建输出转换器
+        BeanOutputConverter<AiPlanOutput> outputConverter = new BeanOutputConverter<>(AiPlanOutput.class);
+        String formatInstructions = outputConverter.getFormat();
+
+        // 加载提示词模板
+        Resource resource = resourceLoader.getResource("classpath:prompts/create-plan.st");
+        PromptTemplate promptTemplate = new PromptTemplate(resource);
+
+        // 构建模板参数
+        Map<String, Object> promptParameters = new HashMap<>();
+        promptParameters.put("description", aiCreatePlanReq.getDescription());
+        promptParameters.put("userHasCategories", !userCategories.isEmpty());
+        promptParameters.put("categories", String.join("、", userCategories));
+        promptParameters.put("currentDate", LocalDate.now().toString());
+        promptParameters.put("currentDayOfWeek", LocalDate.now().getDayOfWeek().toString());
+        boolean hasType = aiCreatePlanReq.getType() != null;
+        promptParameters.put("hasType", hasType);
+        promptParameters.put("format", formatInstructions);
+
+        // 无论 hasType 是 true 还是 false，都必须初始化 typeDesc
+        String typeDesc = "";
+        if (hasType) {
+            typeDesc = switch (aiCreatePlanReq.getType()) {
+                case 0 -> "普通计划";
+                case 1 -> "四象限计划（重要紧急矩阵）";
+                case 2 -> "每日计划";
+                default -> "普通计划";
+            };
+        }
+        promptParameters.put("typeDesc", typeDesc);
+
+        // 生成提示词
+        Prompt prompt = promptTemplate.create(promptParameters);
+
+        // 打印构建完成的提示词
+        String promptContent = prompt.getContents();
+        log.info("AI构建的计划创建提示词：\n{}", promptContent);
+
+        // 调用AI生成计划
+        String aiResponse = chatClient.prompt(prompt)
+                .call()
+                .content();
+        log.info("AI生成的计划创建结果：\n{}", aiResponse);
+
+        // 使用 BeanOutputConverter 解析响应
+        AiPlanOutput aiPlanOutput = outputConverter.convert(aiResponse);
+
+        // 创建计划并返回
+        return createPlanFromAiOutput(aiPlanOutput, aiCreatePlanReq, userId, userCategories);
+    }
+
+    /**
+     * 根据AI输出创建计划
+     */
+    private Long createPlanFromAiOutput(AiPlanOutput aiPlanOutput, AiCreatePlanReq aiCreatePlanReq,
+                                        Long userId, List<String> userCategories) {
+        try {
+            // 验证必填字段
+            String title = aiPlanOutput.getTitle();
+            String description = aiPlanOutput.getDescription();
+            if (!StringUtils.hasText(title)) {
+                title = truncateDescription(aiCreatePlanReq.getDescription(), 50);
+            }
+            if (!StringUtils.hasText(description)) {
+                description = aiCreatePlanReq.getDescription();
+            }
+
+            // 处理分类：查找或创建
+            Long categoryId = null;
+            if (StringUtils.hasText(aiPlanOutput.getCategoryName())) {
+                categoryId = findOrCreateCategory(aiPlanOutput.getCategoryName(), userCategories);
+            }
+
+            // 解析时间（支持 null 值）
+            LocalDateTime startTime = null;
+            LocalDateTime dueTime = null;
+            if (StringUtils.hasText(aiPlanOutput.getStartTime()) && !"null".equals(aiPlanOutput.getStartTime()) &&
+                StringUtils.hasText(aiPlanOutput.getDueTime()) && !"null".equals(aiPlanOutput.getDueTime())) {
+                try {
+                    startTime = LocalDateTime.parse(aiPlanOutput.getStartTime().replace(" ", "T"));
+                    dueTime = LocalDateTime.parse(aiPlanOutput.getDueTime().replace(" ", "T"));
+                } catch (Exception e) {
+                    log.warn("解析时间失败，startTime: {}, dueTime: {}", aiPlanOutput.getStartTime(), aiPlanOutput.getDueTime());
+                }
+            }
+
+            // 确定计划类型
+            Integer type = aiPlanOutput.getType();
+            if (type == null) {
+                type = aiCreatePlanReq.getType() != null ? aiCreatePlanReq.getType() : PlanTypeEnum.NORMAL.getCode();
+            }
+
+            // 确定优先级
+            Integer priority = aiPlanOutput.getPriority();
+            if (priority == null) {
+                priority = PlanPriorityEnum.MEDIUM.getCode();
+            }
+
+            // 确定四象限
+            Integer quadrant = aiPlanOutput.getQuadrant();
+            if (quadrant == null) {
+                quadrant = PlanQuadrantEnum.NONE.getCode();
+            }
+
+            // 创建计划
+            PlanEntity plan = new PlanEntity();
+            plan.setUserId(userId);
+            plan.setType(type);
+            plan.setCategoryId(categoryId);
+            plan.setTitle(title);
+            plan.setDescription(description);
+            plan.setPriority(priority);
+            plan.setQuadrant(quadrant);
+            plan.setTags(aiPlanOutput.getTags());
+            plan.setStartTime(startTime);
+            plan.setDueTime(dueTime);
+            plan.setRepeatType(PlanRepeatTypeEnum.NONE.getCode());
+            plan.setStatus(PlanStatusEnum.NOT_STARTED.getCode());
+
+            planMapper.insert(plan);
+            log.info("AI创建计划成功, userId={}, planId={}, categoryId={}", userId, plan.getId(), categoryId);
+
+            // 创建子计划步骤
+            List<String> steps = aiPlanOutput.getSteps();
+            if (steps != null && !steps.isEmpty()) {
+                createPlanSteps(plan.getId(), steps);
+                log.info("AI创建计划步骤成功, planId={}, stepCount={}", plan.getId(), steps.size());
+            }
+
+            return plan.getId();
+
+        } catch (Exception e) {
+            log.error("创建AI计划失败", e);
+            throw new BusinessException("AI生成计划失败，请重试");
+        }
+    }
+
+    /**
+     * 批量创建计划步骤
+     */
+    private void createPlanSteps(Long planId, List<String> stepTitles) {
+        for (String stepTitle : stepTitles) {
+            if (StringUtils.hasText(stepTitle)) {
+                PlanStepEntity step = new PlanStepEntity();
+                step.setPlanId(planId);
+                step.setTitle(stepTitle.trim());
+                step.setStatus(PlanStatusEnum.NOT_STARTED.getCode());
+                planStepMapper.insert(step);
+            }
+        }
+    }
+
+    /**
+     * 查找或创建分类
+     */
+    private Long findOrCreateCategory(String categoryName, List<String> userCategories) {
+        // 精确匹配现有分类
+        if (userCategories.contains(categoryName)) {
+            LambdaQueryWrapper<PlanCategoryEntity> wrapper = new LambdaQueryWrapper<>();
+            wrapper.eq(PlanCategoryEntity::getUserId, StpUtil.getLoginIdAsLong())
+                    .eq(PlanCategoryEntity::getName, categoryName);
+            PlanCategoryEntity category = planCategoryMapper.selectOne(wrapper);
+            if (category != null) {
+                return category.getId();
+            }
+        }
+
+        // 模糊匹配（处理可能的别名）
+        for (String existingCategory : userCategories) {
+            if (existingCategory.contains(categoryName) || categoryName.contains(existingCategory)) {
+                LambdaQueryWrapper<PlanCategoryEntity> wrapper = new LambdaQueryWrapper<>();
+                wrapper.eq(PlanCategoryEntity::getUserId, StpUtil.getLoginIdAsLong())
+                        .eq(PlanCategoryEntity::getName, existingCategory);
+                PlanCategoryEntity category = planCategoryMapper.selectOne(wrapper);
+                if (category != null) {
+                    return category.getId();
+                }
+            }
+        }
+
+        // 创建新分类
+        try {
+            CreatePlanCategoryReq createReq = new CreatePlanCategoryReq();
+            createReq.setName(categoryName);
+            return planCategoryService.createCategory(createReq);
+        } catch (Exception e) {
+            log.warn("创建分类失败: {}", categoryName, e);
+            return null;
+        }
+    }
+
+    /**
+     * 截断描述作为标题
+     */
+    private String truncateDescription(String description, int maxLength) {
+        if (description == null) {
+            return "未命名计划";
+        }
+        String truncated = description.length() > maxLength
+                ? description.substring(0, maxLength)
+                : description;
+        // 去除可能的换行符
+        return truncated.replaceAll("\\r?\\n", " ").trim();
     }
 
     @Override
@@ -387,6 +627,7 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, PlanEntity> impleme
         LambdaQueryWrapper<PlanEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(PlanEntity::getUserId, userId)
                 .eq(PlanEntity::getCategoryId, categoryId)
+                .eq(PlanEntity::getType, PlanTypeEnum.NORMAL)
                 .orderByAsc(PlanEntity::getStatus)
                 .orderByDesc(PlanEntity::getPriority)
                 .orderByDesc(PlanEntity::getCreatedAt);

@@ -1,6 +1,7 @@
 package com.springleaf.thinkdo.controller;
 
 import com.springleaf.thinkdo.common.Result;
+import com.springleaf.thinkdo.domain.request.AiCreatePlanReq;
 import com.springleaf.thinkdo.domain.request.CreatePlanReq;
 import com.springleaf.thinkdo.domain.request.CreateQuadrantPlanReq;
 import com.springleaf.thinkdo.domain.request.PlanQueryReq;
@@ -30,6 +31,15 @@ public class PlanController {
     @PostMapping("/create")
     public Result<Long> createPlan(@RequestBody @Valid CreatePlanReq createPlanReq) {
         Long planId = planService.createPlan(createPlanReq);
+        return Result.success(planId);
+    }
+
+    /**
+     * AI创建计划
+     */
+    @PostMapping("/aiCreate")
+    public Result<Long> aiCreatePlan(@RequestBody @Valid AiCreatePlanReq aiCreatePlanReq) {
+        Long planId = planService.aiCreatePlan(aiCreatePlanReq);
         return Result.success(planId);
     }
 
