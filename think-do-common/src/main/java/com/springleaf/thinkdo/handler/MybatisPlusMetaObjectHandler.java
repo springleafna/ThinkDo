@@ -3,7 +3,6 @@ package com.springleaf.thinkdo.handler;
 import com.baomidou.mybatisplus.core.handlers.MetaObjectHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.ibatis.reflection.MetaObject;
-import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
 
@@ -11,7 +10,6 @@ import java.time.LocalDateTime;
  * MyBatis-Plus 字段自动填充处理器
  */
 @Slf4j
-@Component
 public class MybatisPlusMetaObjectHandler implements MetaObjectHandler {
 
     @Override

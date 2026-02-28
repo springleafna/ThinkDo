@@ -20,7 +20,7 @@ spring:
   data:
     redis:
       host: ${IP}
-      port: ${REDIS_POST}
+      port: ${REDIS_PORT}
       password: ${REDIS_PASSWORD}
       database: ${REDIS_DATABASE}
       lettuce:
@@ -34,3 +34,8 @@ spring:
           test-while-idle: true                 # 空闲时检测连接有效性
           test-on-borrow: false                 # 借出时不检测（性能考虑）
           test-on-create: false                 # 创建时不检测（性能考虑）
+
+rustfs:
+  url: http://${IP}:${RUSTFS_PORT}
+  access-key-id: ${RUSTFS_ACCESS_KEY_ID}
+  secret-access-key: ${RUSTFS_SECRET_ACCESS_KEY}
