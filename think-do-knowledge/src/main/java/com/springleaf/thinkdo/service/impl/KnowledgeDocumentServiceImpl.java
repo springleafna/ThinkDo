@@ -57,6 +57,7 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
             throw new BusinessException("来源地址不能为空");
         }
 
+        // 上传文件并返回StoredFileDTO
         StoredFileDTO stored = resolveStoredFile(kbEntity.getCollectionName(), sourceType, sourceLocation, file);
 
         KnowledgeDocumentEntity documentEntity = KnowledgeDocumentEntity.builder()
@@ -205,7 +206,18 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
     }
 
 
+    /**
+     * 根据源类型解析并上传文件，返回文件的元数据信息。
+     *
+     * @param bucketName     目标存储桶名称
+     * @param sourceType     文件来源类型（本地文件或远程链接）
+     * @param sourceLocation 远程文件的URL地址（当sourceType不为FILE时使用）
+     * @param file           本地上传的MultipartFile对象（当sourceType为FILE时使用）
+     * @return StoredFileDTO 包含文件URL、类型、大小等元数据的对象
+     * @throws BusinessException 当sourceType为FILE但file为空时抛出
+     */
     private StoredFileDTO resolveStoredFile(String bucketName, SourceType sourceType, String sourceLocation, MultipartFile file) {
+        // 处理本地文件上传逻辑
         if (SourceType.FILE == sourceType) {
             if (file == null) {
                 throw new BusinessException("上传文件不能为空");
@@ -213,8 +225,10 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
             return fileStorageService.upload(bucketName, file);
         }
 
+        // 处理远程文件抓取逻辑
         HttpClientHelper.HttpFetchResponse response = httpClientHelper.get(sourceLocation, Map.of());
         String fileName = StringUtils.hasText(response.fileName()) ? response.fileName() : "remote-file";
         return fileStorageService.upload(bucketName, response.body(), fileName, response.contentType());
     }
+
 }

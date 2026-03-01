@@ -39,3 +39,6 @@ rustfs:
   url: http://${IP}:${RUSTFS_PORT}
   access-key-id: ${RUSTFS_ACCESS_KEY_ID}
   secret-access-key: ${RUSTFS_SECRET_ACCESS_KEY}
+
+milvus:
+  uri: http://${IP}:${MILVUS_PORT}
