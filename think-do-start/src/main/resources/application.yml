@@ -32,7 +32,69 @@ spring:
     retry:
       max-attempts: 1  # 不重试，失败立即返回
       on-client-errors: false
+ai:
+  providers:
+    # 阿里百炼
+    bailian:
+      url: https://dashscope.aliyuncs.com
+      api-key: ${AI_BAILIAN_API_KEY}
+      endpoints:
+        chat: /compatible-mode/v1/chat/completions
+        rerank: /api/v1/services/rerank/text-rerank/text-rerank
+    # 硅基流动
+    siliconflow:
+      url: https://api.siliconflow.cn
+      api-key: ${AI_SILICONFLOW_API_KEY}
+      endpoints:
+        chat: /v1/chat/completions
+        embedding: /v1/embeddings
 
+  selection:
+    failure-threshold: 2
+    open-duration-ms: 30000
+
+  stream:
+    message-chunk-size: 1
+
+  chat:
+    default-model: qwen3-max
+    deep-thinking-model: qwen3-max
+    candidates:
+      - id: qwen-plus
+        provider: bailian
+        model: qwen-plus-latest
+        priority: 1
+      - id: qwen3-max
+        provider: bailian
+        model: qwen3-max
+        supports-thinking: true
+        priority: 3
+      - id: glm-4.7
+        provider: siliconflow
+        model: Pro/zai-org/GLM-4.7
+        supports-thinking: true
+        priority: 0
+
+  embedding:
+    default-model: qwen-emb-8b
+    candidates:
+      - id: qwen-emb-8b
+        provider: siliconflow
+        model: Qwen/Qwen3-Embedding-8B
+        dimension: 4096
+        priority: 1
+
+  rerank:
+    default-model: qwen3-rerank
+    candidates:
+      - id: qwen3-rerank
+        provider: bailian
+        model: qwen3-rerank
+        priority: 1
+      - id: rerank-noop
+        provider: noop
+        model: noop
+        priority: 100
 # Sa-Token配置
 sa-token:
   # token名称 (同时也是cookie名称)
