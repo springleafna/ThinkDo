@@ -3,6 +3,9 @@ package com.springleaf.thinkdo.chat;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.springleaf.thinkdo.chat.stream.StreamAsyncExecutor;
+import com.springleaf.thinkdo.chat.stream.StreamCallback;
+import com.springleaf.thinkdo.chat.stream.StreamCancellationHandle;
 import com.springleaf.thinkdo.config.AIModelProperties;
 import com.springleaf.thinkdo.enums.ModelCapability;
 import com.springleaf.thinkdo.enums.ModelProvider;
@@ -14,12 +17,18 @@ import com.springleaf.thinkdo.model.ModelTarget;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.*;
+import okio.BufferedSource;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 @Slf4j
 @Service
@@ -27,6 +36,9 @@ import java.util.List;
 public class SiliconFlowChatClient implements ChatClient {
 
     private final OkHttpClient httpClient;
+
+    @Qualifier("modelStreamExecutor")
+    private final Executor modelStreamExecutor;
 
     private final Gson gson = new Gson();
 
@@ -64,6 +76,79 @@ public class SiliconFlowChatClient implements ChatClient {
         }
 
         return extractChatContent(respJson);
+    }
+
+    @Override
+    public StreamCancellationHandle streamChat(ChatRequest request, StreamCallback callback, ModelTarget target) {
+        Call call = httpClient.newCall(buildStreamRequest(request, target));
+        return StreamAsyncExecutor.submit(
+                modelStreamExecutor,
+                call,
+                callback,
+                cancelled -> doStream(call, callback, cancelled)
+        );
+    }
+
+    private Request buildStreamRequest(ChatRequest request, ModelTarget target) {
+        AIModelProperties.ProviderConfig provider = requireProvider(target);
+        JsonObject reqBody = buildRequestBody(request, target, true);
+        return new Request.Builder()
+                .url(resolveUrl(provider, target))
+                .post(RequestBody.create(reqBody.toString(), HttpMediaTypes.JSON))
+                .addHeader("Content-Type", HttpMediaTypes.JSON_UTF8_HEADER)
+                .addHeader("Accept", "text/event-stream")
+                .addHeader("Authorization", "Bearer " + provider.getApiKey())
+                .build();
+    }
+
+    private void doStream(Call call, StreamCallback callback, AtomicBoolean cancelled) {
+        try (Response response = call.execute()) {
+            if (!response.isSuccessful()) {
+                String body = readBody(response.body());
+                throw new ModelClientException(
+                        "SiliconFlow 流式请求失败: HTTP " + response.code() + " - " + body,
+                        classifyStatus(response.code()),
+                        response.code()
+                );
+            }
+            ResponseBody body = response.body();
+            if (body == null) {
+                throw new ModelClientException("SiliconFlow 流式响应为空", ModelClientErrorType.INVALID_RESPONSE, null);
+            }
+            BufferedSource source = body.source();
+            boolean completed = false;
+            while (!cancelled.get()) {
+                String line = source.readUtf8Line();
+                if (line == null) {
+                    break;
+                }
+                if (line.isBlank()) {
+                    continue;
+                }
+
+                try {
+                    OpenAIStyleSseParser.ParsedEvent event = OpenAIStyleSseParser.parseLine(line, gson, true);
+                    if (event.hasReasoning()) {
+                        callback.onThinking(event.reasoning());
+                    }
+                    if (event.hasContent()) {
+                        callback.onContent(event.content());
+                    }
+                    if (event.completed()) {
+                        callback.onComplete();
+                        completed = true;
+                        break;
+                    }
+                } catch (Exception parseEx) {
+                    log.warn("SiliconFlow 流式响应解析失败: line={}", line, parseEx);
+                }
+            }
+            if (!cancelled.get() && !completed) {
+                throw new ModelClientException("SiliconFlow 流式响应异常结束", ModelClientErrorType.INVALID_RESPONSE, null);
+            }
+        } catch (Exception e) {
+            callback.onError(e);
+        }
     }
 
     private JsonObject buildRequestBody(ChatRequest request, ModelTarget target, boolean stream) {

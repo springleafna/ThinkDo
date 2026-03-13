@@ -20,6 +20,7 @@ import org.springframework.test.context.TestPropertySource;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.Executor;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -37,6 +38,10 @@ public class AIChatTest {
     @Autowired
     private AIModelProperties aiModelProperties;
 
+    @Qualifier("modelStreamExecutor")
+    @Autowired
+    private Executor modelStreamExecutor;
+
     private ChatClient chatClient;
 
     /**
@@ -52,7 +57,7 @@ public class AIChatTest {
                 .build();
 
         // 创建 SiliconFlowChatClient 实例
-        chatClient = new SiliconFlowChatClient(httpClient);
+        chatClient = new SiliconFlowChatClient(httpClient, modelStreamExecutor);
     }
 
     @Test
