@@ -35,6 +35,11 @@ public class ChatController {
     private final Executor modelStreamExecutor;
     private final RoutingLLMService routingLLMService;
 
+    @GetMapping(value = "/chat/test/v2")
+    public String chatTestV2(@RequestParam(defaultValue = "你好，请介绍一下你自己") String message) {
+        return routingLLMService.chat(message);
+    }
+
     @GetMapping(value = "/chat/stream/v2", produces = "text/event-stream;charset=UTF-8")
     public SseEmitter chat(@RequestParam String message) {
         SseEmitter emitter = new SseEmitter(0L);

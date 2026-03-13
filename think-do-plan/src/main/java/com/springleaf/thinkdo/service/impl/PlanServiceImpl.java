@@ -3,6 +3,7 @@ package com.springleaf.thinkdo.service.impl;
 import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.springleaf.thinkdo.chat.RoutingLLMService;
 import com.springleaf.thinkdo.domain.dto.AiPlanOutput;
 import com.springleaf.thinkdo.domain.entity.PlanCategoryEntity;
 import com.springleaf.thinkdo.domain.entity.PlanEntity;
@@ -52,18 +53,19 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, PlanEntity> impleme
     private final PlanCategoryMapper planCategoryMapper;
     private final PlanCategoryService planCategoryService;
     private final PlanStepMapper planStepMapper;
-    private final ChatClient chatClient;
     private final ResourceLoader resourceLoader;
+    private final RoutingLLMService routingLLMService;
+
 
     public PlanServiceImpl(PlanMapper planMapper, PlanCategoryMapper planCategoryMapper,
                            PlanCategoryService planCategoryService, PlanStepMapper planStepMapper,
-                           ChatClient.Builder builder, ResourceLoader resourceLoader) {
+                           ResourceLoader resourceLoader, RoutingLLMService routingLLMService) {
         this.planMapper = planMapper;
         this.planCategoryMapper = planCategoryMapper;
         this.planCategoryService = planCategoryService;
         this.planStepMapper = planStepMapper;
-        this.chatClient = builder.build();
         this.resourceLoader = resourceLoader;
+        this.routingLLMService = routingLLMService;
     }
 
     @Override
@@ -180,9 +182,7 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, PlanEntity> impleme
         log.info("AI构建的计划创建提示词：\n{}", promptContent);
 
         // 调用AI生成计划
-        String aiResponse = chatClient.prompt(prompt)
-                .call()
-                .content();
+        String aiResponse = routingLLMService.chat(promptContent);
         log.info("AI生成的计划创建结果：\n{}", aiResponse);
 
         // 使用 BeanOutputConverter 解析响应

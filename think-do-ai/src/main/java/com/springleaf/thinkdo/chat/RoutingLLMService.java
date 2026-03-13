@@ -6,9 +6,7 @@ import com.springleaf.thinkdo.chat.stream.StreamCancellationHandle;
 import com.springleaf.thinkdo.enums.ModelCapability;
 import com.springleaf.thinkdo.enums.ResultCodeEnum;
 import com.springleaf.thinkdo.exception.BusinessException;
-import com.springleaf.thinkdo.model.ModelHealthStore;
-import com.springleaf.thinkdo.model.ModelSelector;
-import com.springleaf.thinkdo.model.ModelTarget;
+import com.springleaf.thinkdo.model.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
@@ -39,20 +37,29 @@ public class RoutingLLMService implements LLMService {
     private final ModelSelector selector;
     private final ModelHealthStore healthStore;
     private final Map<String, ChatClient> clientsByProvider;
+    private final ModelRoutingExecutor executor;
+
 
     public RoutingLLMService(
             ModelSelector selector,
             ModelHealthStore healthStore,
+            ModelRoutingExecutor executor,
             List<ChatClient> clients) {
         this.selector = selector;
         this.healthStore = healthStore;
+        this.executor = executor;
         this.clientsByProvider = clients.stream()
                 .collect(Collectors.toMap(ChatClient::provider, Function.identity()));
     }
 
     @Override
     public String chat(ChatRequest request) {
-        return "";
+        return executor.executeWithFallback(
+                ModelCapability.CHAT,
+                selector.selectChatCandidates(request.getThinking()),
+                target -> clientsByProvider.get(target.candidate().getProvider()),
+                (client, target) -> client.chat(request, target)
+        );
     }
 
     /**
