@@ -17,7 +17,10 @@ public enum ResultCodeEnum {
     FORBIDDEN(403, "禁止访问"),
 
     PARAM_ERROR(400, "参数错误"),
-    SYSTEM_ERROR(500, "系统错误");
+    SYSTEM_ERROR(500, "系统错误"),
+
+    REMOTE_ERROR(20001, "调用第三方服务出错");
+
 
     private final Integer code;
     private final String message;

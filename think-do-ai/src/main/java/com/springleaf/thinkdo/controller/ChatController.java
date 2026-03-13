@@ -1,9 +1,6 @@
 package com.springleaf.thinkdo.controller;
 
-import com.springleaf.thinkdo.chat.ChatClient;
-import com.springleaf.thinkdo.chat.ChatMessage;
-import com.springleaf.thinkdo.chat.ChatRequest;
-import com.springleaf.thinkdo.chat.SiliconFlowChatClient;
+import com.springleaf.thinkdo.chat.*;
 import com.springleaf.thinkdo.chat.stream.StreamCallback;
 import com.springleaf.thinkdo.chat.stream.StreamCancellationHandle;
 import com.springleaf.thinkdo.config.AIModelProperties;
@@ -24,6 +21,7 @@ import java.util.concurrent.Executor;
 
 /**
  * AI 聊天控制器
+ * 以下接口仅作为测试使用
  */
 @Slf4j
 @RestController
@@ -35,8 +33,48 @@ public class ChatController {
     private final OkHttpClient okHttpClient;
     @Qualifier("modelStreamExecutor")
     private final Executor modelStreamExecutor;
+    private final RoutingLLMService routingLLMService;
 
-    @GetMapping("/chat/stream")
+    @GetMapping(value = "/chat/stream/v2", produces = "text/event-stream;charset=UTF-8")
+    public SseEmitter chat(@RequestParam String message) {
+        SseEmitter emitter = new SseEmitter(0L);
+
+        StreamCallback callback = new StreamCallback() {
+            @Override
+            public void onContent(String content) {
+                try {
+                    emitter.send(SseEmitter.event().data(content));
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+
+            @Override
+            public void onComplete() {
+                emitter.complete();
+            }
+
+            @Override
+            public void onError(Throwable error) {
+                emitter.completeWithError(error);
+            }
+        };
+
+        // 构建请求
+        ChatRequest request = ChatRequest.builder()
+                .messages(List.of(
+                        ChatMessage.system("你是一个友好的AI助手，请用简洁的语言回答问题。"),
+                        ChatMessage.user(message)
+                ))
+                .temperature(0.7)
+                .maxTokens(500)
+                .build();
+
+        routingLLMService.streamChat(request, callback);
+        return emitter;
+    }
+
+    @GetMapping("/chat/stream/v1")
     public SseEmitter streamChat(@RequestParam String message) {
         SseEmitter emitter = new SseEmitter(30_000L);
 

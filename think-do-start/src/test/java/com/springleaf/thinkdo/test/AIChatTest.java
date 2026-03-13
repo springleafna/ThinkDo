@@ -16,11 +16,15 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Bean;
 import org.springframework.test.context.TestPropertySource;
 
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.Executor;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -95,7 +99,7 @@ public class AIChatTest {
         ChatRequest request = ChatRequest.builder()
                 .messages(List.of(
                         ChatMessage.system("你是一个专业的代码助手。"),
-                        ChatMessage.user("如何理解 Java 中的多态性？请用简短的语言解释。")
+                        ChatMessage.user("你是谁？请用简短的语言解释。")
                 ))
                 .temperature(0.5)
                 .maxTokens(300)
@@ -203,5 +207,21 @@ public class AIChatTest {
      */
     @EnableConfigurationProperties(AIModelProperties.class)
     public static class Config {
+
+        /**
+         * 创建测试用的线程池执行器
+         */
+        @Bean
+        @Qualifier("modelStreamExecutor")
+        public Executor modelStreamExecutor() {
+            return new ThreadPoolExecutor(
+                    2,
+                    4,
+                    60,
+                    TimeUnit.SECONDS,
+                    new LinkedBlockingQueue<>(200),
+                    r -> new Thread(r, "test_model_stream_executor_")
+            );
+        }
     }
 }
