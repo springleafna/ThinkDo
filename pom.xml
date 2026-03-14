@@ -53,6 +53,7 @@
         <okhttp.version>4.12.0</okhttp.version>
         <milvus-sdk.version>2.6.6</milvus-sdk.version>
         <transmittable-thread-local.version>2.14.5</transmittable-thread-local.version>
+        <redisson.version>4.0.0</redisson.version>
     </properties>
 
     <dependencies>
@@ -200,6 +201,12 @@
                 <groupId>com.alibaba</groupId>
                 <artifactId>transmittable-thread-local</artifactId>
                 <version>${transmittable-thread-local.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.redisson</groupId>
+                <artifactId>redisson-spring-boot-starter</artifactId>
+                <version>${redisson.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
