@@ -13,6 +13,7 @@ import com.springleaf.thinkdo.domain.response.MessageInfoResp;
 import com.springleaf.thinkdo.exception.BusinessException;
 import com.springleaf.thinkdo.mapper.ConversationMapper;
 import com.springleaf.thinkdo.mapper.MessageMapper;
+import com.springleaf.thinkdo.prompt.PromptTemplateLoader;
 import com.springleaf.thinkdo.service.MessageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,7 +23,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
+
+import static com.springleaf.thinkdo.constant.ChatConstant.CONVERSATION_TITLE_PROMPT_PATH;
 
 /**
  * 消息Service实现
@@ -35,6 +39,8 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, MessageEntity
     private final MessageMapper messageMapper;
     private final ConversationMapper conversationMapper;
     private final LLMService llmService;
+    private final PromptTemplateLoader promptTemplateLoader;
+
 
     @Override
     public List<MessageInfoResp> getMessagesByConversationId(String conversationId) {
@@ -146,8 +152,12 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, MessageEntity
      * 根据用户问题生成会话标题
      */
     private String generateTitleFromQuestion(String question) {
-        // TODO: 提示词待优化
-        String prompt = "根据用户提问生成一个简短的标题，用户提问如下：" + question;
+        String prompt = promptTemplateLoader.render(
+                CONVERSATION_TITLE_PROMPT_PATH,
+                Map.of(
+                        "question", question
+                )
+        );
         try {
             ChatRequest request = ChatRequest.builder()
                     .messages(List.of(ChatMessage.user(prompt)))
