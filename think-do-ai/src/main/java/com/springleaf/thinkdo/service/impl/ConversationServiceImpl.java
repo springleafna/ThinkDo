@@ -1,19 +1,18 @@
 package com.springleaf.thinkdo.service.impl;
 
 import cn.dev33.satoken.stp.StpUtil;
+import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.springleaf.thinkdo.domain.response.ConversationInfoResp;
 import com.springleaf.thinkdo.domain.request.CreateConversationReq;
-import com.springleaf.thinkdo.domain.response.MessageInfoResp;
 import com.springleaf.thinkdo.domain.request.UpdateConversationReq;
 import com.springleaf.thinkdo.domain.entity.ConversationEntity;
 import com.springleaf.thinkdo.domain.entity.ConversationSummaryEntity;
-import com.springleaf.thinkdo.domain.entity.MessageEntity;
 import com.springleaf.thinkdo.exception.BusinessException;
 import com.springleaf.thinkdo.mapper.ConversationMapper;
 import com.springleaf.thinkdo.mapper.ConversationSummaryMapper;
-import com.springleaf.thinkdo.mapper.MessageMapper;
 import com.springleaf.thinkdo.service.ConversationService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
@@ -33,14 +32,11 @@ public class ConversationServiceImpl extends ServiceImpl<ConversationMapper, Con
 
     private final ConversationMapper conversationMapper;
     private final ConversationSummaryMapper conversationSummaryMapper;
-    private final MessageMapper messageMapper;
 
     public ConversationServiceImpl(ConversationMapper conversationMapper,
-                                   ConversationSummaryMapper conversationSummaryMapper,
-                                   MessageMapper messageMapper) {
+                                   ConversationSummaryMapper conversationSummaryMapper) {
         this.conversationMapper = conversationMapper;
         this.conversationSummaryMapper = conversationSummaryMapper;
-        this.messageMapper = messageMapper;
     }
 
     @Override
@@ -152,27 +148,16 @@ public class ConversationServiceImpl extends ServiceImpl<ConversationMapper, Con
     }
 
     @Override
-    public List<MessageInfoResp> getMessagesByConversationId(String conversationId) {
-        Long userId = StpUtil.getLoginIdAsLong();
-
-        // 验证会话是否存在且属于当前用户
-        ConversationEntity conversation = conversationMapper.selectById(conversationId);
-        if (conversation == null) {
-            throw new BusinessException("会话不存在");
+    public ConversationEntity findConversation(String conversationId, Long userId) {
+        if (StrUtil.isBlank(conversationId) || userId == null) {
+            return null;
         }
-        if (!conversation.getUserId().equals(userId)) {
-            throw new BusinessException("无权查看此会话的消息");
-        }
-
-        LambdaQueryWrapper<MessageEntity> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(MessageEntity::getConversationId, conversationId)
-                .orderByAsc(MessageEntity::getCreatedAt);
-
-        List<MessageEntity> messageList = messageMapper.selectList(wrapper);
-
-        return messageList.stream()
-                .map(this::convertToMessageResp)
-                .collect(Collectors.toList());
+        return conversationMapper.selectOne(
+                Wrappers.lambdaQuery(ConversationEntity.class)
+                        .eq(ConversationEntity::getConversationId, conversationId)
+                        .eq(ConversationEntity::getUserId, userId)
+                        .eq(ConversationEntity::getDeleted, 0)
+        );
     }
 
     /**
@@ -181,15 +166,6 @@ public class ConversationServiceImpl extends ServiceImpl<ConversationMapper, Con
     private ConversationInfoResp convertToResp(ConversationEntity conversation) {
         ConversationInfoResp resp = new ConversationInfoResp();
         BeanUtils.copyProperties(conversation, resp);
-        return resp;
-    }
-
-    /**
-     * 转换为消息信息响应对象
-     */
-    private MessageInfoResp convertToMessageResp(MessageEntity message) {
-        MessageInfoResp resp = new MessageInfoResp();
-        BeanUtils.copyProperties(message, resp);
         return resp;
     }
 }

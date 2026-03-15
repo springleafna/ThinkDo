@@ -4,10 +4,13 @@ import com.springleaf.thinkdo.common.Result;
 import com.springleaf.thinkdo.domain.response.ConversationInfoResp;
 import com.springleaf.thinkdo.domain.response.MessageInfoResp;
 import com.springleaf.thinkdo.domain.request.UpdateConversationReq;
+import com.springleaf.thinkdo.service.ChatService;
 import com.springleaf.thinkdo.service.ConversationService;
+import com.springleaf.thinkdo.service.MessageService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
 
@@ -20,6 +23,29 @@ import java.util.List;
 public class ChatController {
 
     private final ConversationService conversationService;
+    private final MessageService messageService;
+    private final ChatService chatService;
+
+    /**
+     * 发起流式对话
+     */
+    @GetMapping(value = "/sse", produces = "text/event-stream;charset=UTF-8")
+    public SseEmitter chat(@RequestParam String question,
+                           @RequestParam(required = false) String conversationId,
+                           @RequestParam(required = false, defaultValue = "false") Boolean deepThinking) {
+        SseEmitter emitter = new SseEmitter(0L);
+        chatService.streamChat(question, conversationId, deepThinking, emitter);
+        return emitter;
+    }
+
+    /**
+     * 停止指定的对话任务
+     */
+    @PostMapping(value = "/stop")
+    public Result<Void> stop(@RequestParam String taskId) {
+        chatService.stopTask(taskId);
+        return Result.success();
+    }
 
     /**
      * 获取会话列表
@@ -34,7 +60,7 @@ public class ChatController {
      */
     @GetMapping("/messages/{conversationId}")
     public Result<List<MessageInfoResp>> getMessagesByConversationId(@PathVariable String conversationId) {
-        return Result.success(conversationService.getMessagesByConversationId(conversationId));
+        return Result.success(messageService.getMessagesByConversationId(conversationId));
     }
 
     /**

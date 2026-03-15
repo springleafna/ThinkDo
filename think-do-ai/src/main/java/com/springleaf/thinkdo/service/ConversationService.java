@@ -1,8 +1,8 @@
 package com.springleaf.thinkdo.service;
 
+import com.springleaf.thinkdo.domain.entity.ConversationEntity;
 import com.springleaf.thinkdo.domain.response.ConversationInfoResp;
 import com.springleaf.thinkdo.domain.request.CreateConversationReq;
-import com.springleaf.thinkdo.domain.response.MessageInfoResp;
 import com.springleaf.thinkdo.domain.request.UpdateConversationReq;
 
 import java.util.List;
@@ -50,10 +50,11 @@ public interface ConversationService {
     List<ConversationInfoResp> getConversationList();
 
     /**
-     * 根据会话ID获取历史消息
+     * 查找指定的对话信息
      *
-     * @param conversationId 会话ID
-     * @return 消息列表
+     * @param conversationId 对话ID
+     * @param userId         用户ID
+     * @return 对话信息，如果不存在则返回null
      */
-    List<MessageInfoResp> getMessagesByConversationId(String conversationId);
+    ConversationEntity findConversation(String conversationId, Long userId);
 }
