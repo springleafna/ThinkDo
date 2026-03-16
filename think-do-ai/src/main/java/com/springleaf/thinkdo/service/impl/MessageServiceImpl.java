@@ -22,6 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -100,7 +101,6 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, MessageEntity
                 conversationMapper.updateById(existing);
             }
         }
-        // TODO: 生成摘要
 
         return messageId;
     }
@@ -123,15 +123,17 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, MessageEntity
             return List.of();
         }
 
-        // 查询该会话的所有消息记录
+        // 查询该会话的消息记录，限制获取最近20条（10轮对话）
         LambdaQueryWrapper<MessageEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(MessageEntity::getConversationId, conversationId)
-                .orderByAsc(MessageEntity::getCreatedAt);
+                .orderByDesc(MessageEntity::getCreatedAt)
+                .last("LIMIT 20");
 
         List<MessageEntity> messageList = messageMapper.selectList(wrapper);
 
-        // 转换为 ChatMessage 列表
+        // 转换为 ChatMessage 列表并按时间升序排列
         return messageList.stream()
+                .sorted(Comparator.comparing(MessageEntity::getCreatedAt))
                 .map(messageEntity -> {
                     ChatMessage.Role role = ChatMessage.Role.fromString(messageEntity.getRole());
                     return new ChatMessage(role, messageEntity.getContent());
