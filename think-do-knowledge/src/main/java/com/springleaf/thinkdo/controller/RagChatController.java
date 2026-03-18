@@ -1,12 +1,12 @@
 package com.springleaf.thinkdo.controller;
 
 import com.springleaf.thinkdo.common.Result;
+import com.springleaf.thinkdo.domain.request.UpdateConversationReq;
 import com.springleaf.thinkdo.domain.response.ConversationInfoResp;
 import com.springleaf.thinkdo.domain.response.MessageInfoResp;
-import com.springleaf.thinkdo.domain.request.UpdateConversationReq;
-import com.springleaf.thinkdo.service.ChatService;
 import com.springleaf.thinkdo.service.ConversationService;
 import com.springleaf.thinkdo.service.MessageService;
+import com.springleaf.thinkdo.service.RagChatService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -18,23 +18,24 @@ import java.util.List;
  * 聊天会话Controller
  */
 @RestController
-@RequestMapping("/aiTest/chat")
+@RequestMapping("/ai/chat")
 @RequiredArgsConstructor
-public class ChatController {
+public class RagChatController {
 
     private final ConversationService conversationService;
     private final MessageService messageService;
-    private final ChatService chatService;
+    private final RagChatService ragChatService;
 
     /**
      * 发起流式对话
      */
-    @GetMapping(value = "/sse", produces = "text/event-stream;charset=UTF-8")
+    @GetMapping(value = "/rag", produces = "text/event-stream;charset=UTF-8")
     public SseEmitter chat(@RequestParam String question,
                            @RequestParam(required = false) String conversationId,
-                           @RequestParam(required = false, defaultValue = "false") Boolean deepThinking) {
+                           @RequestParam(required = false, defaultValue = "false") Boolean deepThinking,
+                           @RequestParam(required = false, defaultValue = "false") Boolean useKnowledgeBase) {
         SseEmitter emitter = new SseEmitter(0L);
-        chatService.streamChat(question, conversationId, deepThinking, emitter);
+        ragChatService.streamChat(question, conversationId, deepThinking, useKnowledgeBase, emitter);
         return emitter;
     }
 
@@ -43,7 +44,7 @@ public class ChatController {
      */
     @PostMapping(value = "/stop")
     public Result<Void> stop(@RequestParam String taskId) {
-        chatService.stopTask(taskId);
+        ragChatService.stopTask(taskId);
         return Result.success();
     }
 

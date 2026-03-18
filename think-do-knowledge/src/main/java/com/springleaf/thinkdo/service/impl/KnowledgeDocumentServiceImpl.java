@@ -18,7 +18,6 @@ import com.springleaf.thinkdo.domain.request.KnowledgeDocumentUpdateReq;
 import com.springleaf.thinkdo.domain.request.KnowledgeDocumentUploadReq;
 import com.springleaf.thinkdo.domain.response.KnowledgeDocumentResp;
 import com.springleaf.thinkdo.domain.response.KnowledgeDocumentSearchResp;
-import com.springleaf.thinkdo.embedding.EmbeddingService;
 import com.springleaf.thinkdo.enums.DocumentStatus;
 import com.springleaf.thinkdo.enums.SourceType;
 import com.springleaf.thinkdo.exception.BusinessException;
@@ -65,7 +64,6 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
     private final VectorStoreService vectorStoreService;
     private final KnowledgeChunkService knowledgeChunkService;
     private final KnowledgeDocumentChunkLogMapper chunkLogMapper;
-    private final EmbeddingService embeddingService;
     private final DocumentParserSelector parserSelector;
     private final ObjectMapper objectMapper;
     private final ChunkingStrategyFactory chunkingStrategyFactory;

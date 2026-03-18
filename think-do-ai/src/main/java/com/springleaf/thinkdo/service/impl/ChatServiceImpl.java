@@ -28,7 +28,6 @@ public class ChatServiceImpl implements ChatService {
     private final MessageService messageService;
     private final StreamTaskManager taskManager;
 
-
     @Override
     public void streamChat(String question, String conversationId, Boolean deepThinking, SseEmitter emitter) {
         String actualConversationId = StrUtil.isBlank(conversationId) ? IdUtil.getSnowflakeNextIdStr() : conversationId;
