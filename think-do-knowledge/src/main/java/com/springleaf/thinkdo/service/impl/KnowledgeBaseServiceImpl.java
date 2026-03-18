@@ -6,6 +6,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.springleaf.thinkdo.domain.dto.VectorSpaceId;
+import com.springleaf.thinkdo.domain.dto.VectorSpaceSpec;
 import com.springleaf.thinkdo.domain.entity.KnowledgeBaseEntity;
 import com.springleaf.thinkdo.domain.entity.KnowledgeDocumentEntity;
 import com.springleaf.thinkdo.domain.request.KnowledgeBaseCreateReq;
@@ -16,6 +18,7 @@ import com.springleaf.thinkdo.exception.BusinessException;
 import com.springleaf.thinkdo.mapper.KnowledgeBaseMapper;
 import com.springleaf.thinkdo.mapper.KnowledgeDocumentMapper;
 import com.springleaf.thinkdo.service.KnowledgeBaseService;
+import com.springleaf.thinkdo.service.VectorStoreService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -39,8 +42,8 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
 
     private final KnowledgeBaseMapper knowledgeBaseMapper;
     private final KnowledgeDocumentMapper knowledgeDocumentMapper;
-    // private final VectorStoreAdmin vectorStoreAdmin;
     private final S3Client s3Client;
+    private final VectorStoreService vectorStoreService;
 
     @Transactional
     @Override
@@ -78,14 +81,14 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
             throw new BusinessException("存储桶名称已被占用：" + bucketName);
         }
 
-        // TODO：确保向量空间存在
-        /*VectorSpaceSpec spaceSpec = VectorSpaceSpec.builder()
+        // 确保向量空间存在，若不存在则创建
+        VectorSpaceSpec spaceSpec = VectorSpaceSpec.builder()
                 .spaceId(VectorSpaceId.builder()
                         .logicalName(requestParam.getCollectionName())
                         .build())
                 .remark(requestParam.getName())
                 .build();
-        vectorStoreAdmin.ensureVectorSpace(spaceSpec);*/
+        vectorStoreService.ensureVectorSpace(spaceSpec);
 
         return String.valueOf(kb.getId());
     }

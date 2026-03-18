@@ -1,6 +1,5 @@
 package com.springleaf.thinkdo.service.impl;
 
-import cn.hutool.core.lang.Assert;
 import com.springleaf.thinkdo.domain.dto.StoredFileDTO;
 import com.springleaf.thinkdo.service.FileStorageService;
 import com.springleaf.thinkdo.util.FileTypeDetector;
@@ -9,6 +8,7 @@ import lombok.SneakyThrows;
 import org.apache.tika.Tika;
 import org.springframework.stereotype.Service;
 import org.springframework.util.FileSystemUtils;
+import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
@@ -39,8 +39,12 @@ public class LocalFileStorageServiceImpl implements FileStorageService {
     @SneakyThrows
     public StoredFileDTO upload(String bucketName, MultipartFile file) {
         // 校验bucketName和文件的有效性
-        Assert.notBlank(bucketName, "bucketName 不能为空");
-        Assert.isFalse(file == null || file.isEmpty(), "上传文件不能为空");
+        if (!StringUtils.hasText(bucketName)) {
+            throw new IllegalArgumentException("bucketName 不能为空");
+        }
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("上传文件不能为空");
+        }
 
         // 获取文件原始名称和大小
         String originalFilename = file.getOriginalFilename();
@@ -72,8 +76,12 @@ public class LocalFileStorageServiceImpl implements FileStorageService {
     @Override
     public StoredFileDTO upload(String bucketName, byte[] content, String originalFilename, String contentType) {
         // 校验bucketName和content的有效性
-        Assert.notBlank(bucketName, "bucketName 不能为空");
-        Assert.notNull(content, "上传内容不能为空");
+        if (!StringUtils.hasText(bucketName)) {
+            throw new IllegalArgumentException("bucketName 不能为空");
+        }
+        if (content == null) {
+            throw new IllegalArgumentException("上传内容不能为空");
+        }
 
         // 若未提供有效的MIME类型，则使用Tika库自动检测
         String detected = contentType;

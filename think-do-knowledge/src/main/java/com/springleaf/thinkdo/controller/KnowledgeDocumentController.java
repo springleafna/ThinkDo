@@ -5,7 +5,6 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.springleaf.thinkdo.common.Result;
 import com.springleaf.thinkdo.domain.request.KnowledgeDocumentUpdateReq;
 import com.springleaf.thinkdo.domain.request.KnowledgeDocumentUploadReq;
-import com.springleaf.thinkdo.domain.response.KnowledgeDocumentChunkLogResp;
 import com.springleaf.thinkdo.domain.response.KnowledgeDocumentResp;
 import com.springleaf.thinkdo.domain.response.KnowledgeDocumentSearchResp;
 import com.springleaf.thinkdo.service.KnowledgeDocumentService;
@@ -38,6 +37,15 @@ public class KnowledgeDocumentController {
                                                 @RequestPart(value = "file", required = false) MultipartFile file,
                                                 @ModelAttribute KnowledgeDocumentUploadReq requestParam) {
         return Result.success(documentService.upload(kbId, requestParam, file));
+    }
+
+    /**
+     * 开始分块：抽取文本 -> 分块 -> 嵌入并写入向量库
+     */
+    @PostMapping("/knowledge-base/docs/{doc-id}/chunk")
+    public Result<Void> startChunk(@PathVariable(value = "doc-id") String docId) {
+        documentService.startChunk(docId);
+        return Result.success();
     }
 
     /**

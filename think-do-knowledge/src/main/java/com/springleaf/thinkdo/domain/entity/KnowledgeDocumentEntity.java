@@ -42,16 +42,6 @@ public class KnowledgeDocumentEntity {
     private String sourceLocation;
 
     /**
-     * 是否开启定时拉取：1-启用，0-禁用
-     */
-    private Integer scheduleEnabled;
-
-    /**
-     * 定时表达式（cron）
-     */
-    private String scheduleCron;
-
-    /**
      * 是否启用：1-启用，0-禁用
      */
     private Integer enabled;
@@ -77,29 +67,14 @@ public class KnowledgeDocumentEntity {
     private Long fileSize;
 
     /**
-     * 处理模式：chunk / pipeline
-     * - chunk: 使用分块策略直接分块
-     * - pipeline: 使用数据通道进行清洗处理
-     */
-    private String processMode;
-
-    /**
      * 分块策略
-     * 仅在 processMode=chunk 时有效
      */
     private String chunkStrategy;
 
     /**
      * 分块参数配置（JSON）
-     * 仅在 processMode=chunk 时有效
      */
     private String chunkConfig;
-
-    /**
-     * 数据通道（Pipeline）ID
-     * 仅在 processMode=pipeline 时有效
-     */
-    private Long pipelineId;
 
     /**
      * 状态：

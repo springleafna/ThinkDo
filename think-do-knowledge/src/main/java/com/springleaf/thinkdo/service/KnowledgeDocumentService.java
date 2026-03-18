@@ -26,6 +26,13 @@ public interface KnowledgeDocumentService {
     KnowledgeDocumentResp upload(String kbId, KnowledgeDocumentUploadReq requestParam, MultipartFile file);
 
     /**
+     * 开始文档分片处理
+     *
+     * @param docId 文档 ID
+     */
+    void startChunk(String docId);
+
+    /**
      * 删除文档
      *
      * @param docId 文档 ID

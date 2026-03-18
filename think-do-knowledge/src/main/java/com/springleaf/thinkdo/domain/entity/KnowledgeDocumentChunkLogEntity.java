@@ -1,18 +1,30 @@
-package com.springleaf.thinkdo.domain.response;
+package com.springleaf.thinkdo.domain.entity;
 
+import com.baomidou.mybatisplus.annotation.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
 /**
- * 知识库文档分块日志 VO
+ * 知识库文档分块日志实体
  */
 @Data
-public class KnowledgeDocumentChunkLogResp {
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+@TableName("tb_knowledge_document_chunk_log")
+public class KnowledgeDocumentChunkLogEntity {
 
-    private String id;
+    @TableId(type = IdType.ASSIGN_ID)
+    private Long id;
 
-    private String docId;
+    /**
+     * 文档 ID
+     */
+    private Long docId;
 
     /**
      * 执行状态：running / success / failed
@@ -40,11 +52,6 @@ public class KnowledgeDocumentChunkLogResp {
     private Long embeddingDuration;
 
     /**
-     * 其他耗时（毫秒）
-     */
-    private Long otherDuration;
-
-    /**
      * 总耗时（毫秒）
      */
     private Long totalDuration;
@@ -69,8 +76,9 @@ public class KnowledgeDocumentChunkLogResp {
      */
     private LocalDateTime endTime;
 
-    /**
-     * 创建时间
-     */
+    @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;
+
+    @TableField(fill = FieldFill.INSERT_UPDATE)
+    private LocalDateTime updatedAt;
 }

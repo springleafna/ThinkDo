@@ -1,9 +1,9 @@
 package com.springleaf.thinkdo.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.springleaf.thinkdo.domain.entity.KnowledgeBaseEntity;
+import com.springleaf.thinkdo.domain.entity.KnowledgeChunkEntity;
 import org.apache.ibatis.annotations.Mapper;
 
 @Mapper
-public interface KnowledgeBaseMapper extends BaseMapper<KnowledgeBaseEntity> {
+public interface KnowledgeChunkMapper extends BaseMapper<KnowledgeChunkEntity> {
 }

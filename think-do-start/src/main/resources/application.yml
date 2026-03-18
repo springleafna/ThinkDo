@@ -95,6 +95,11 @@ ai:
         provider: noop
         model: noop
         priority: 100
+rag:
+  default:
+    collection-name: rag_default_store
+    dimension: 4096
+    metric-type: COSINE
 # Sa-Token配置
 sa-token:
   # token名称 (同时也是cookie名称)
