@@ -6,17 +6,25 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.springleaf.thinkdo.context.UserContext;
 import com.springleaf.thinkdo.domain.dto.VectorSpaceId;
 import com.springleaf.thinkdo.domain.dto.VectorSpaceSpec;
+import com.springleaf.thinkdo.domain.entity.IntentNodeEntity;
 import com.springleaf.thinkdo.domain.entity.KnowledgeBaseEntity;
 import com.springleaf.thinkdo.domain.entity.KnowledgeDocumentEntity;
 import com.springleaf.thinkdo.domain.request.KnowledgeBaseCreateReq;
 import com.springleaf.thinkdo.domain.request.KnowledgeBasePageReq;
 import com.springleaf.thinkdo.domain.request.KnowledgeBaseUpdateReq;
 import com.springleaf.thinkdo.domain.response.KnowledgeBaseResp;
+import com.springleaf.thinkdo.enums.IntentKind;
+import com.springleaf.thinkdo.enums.IntentLevel;
+import com.springleaf.thinkdo.enums.KnowledgeScopeEnum;
+import com.springleaf.thinkdo.enums.UserRoleEnum;
 import com.springleaf.thinkdo.exception.BusinessException;
+import com.springleaf.thinkdo.mapper.IntentNodeMapper;
 import com.springleaf.thinkdo.mapper.KnowledgeBaseMapper;
 import com.springleaf.thinkdo.mapper.KnowledgeDocumentMapper;
+import com.springleaf.thinkdo.service.IntentNodeService;
 import com.springleaf.thinkdo.service.KnowledgeBaseService;
 import com.springleaf.thinkdo.service.VectorStoreService;
 import lombok.RequiredArgsConstructor;
@@ -35,6 +43,12 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
+/**
+ * 知识库服务实现
+ * 支持基于角色的权限管理：
+ * - 管理员(ADMIN)：可以创建、查看、修改、删除所有知识库（系统+用户），创建时默认为SYSTEM知识库
+ * - 普通用户(USER)：只能创建、查看、修改、删除自己的用户知识库，创建时为USER知识库
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -44,30 +58,49 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     private final KnowledgeDocumentMapper knowledgeDocumentMapper;
     private final S3Client s3Client;
     private final VectorStoreService vectorStoreService;
+    private final IntentNodeMapper intentNodeMapper;
 
     @Transactional
     @Override
     public String create(KnowledgeBaseCreateReq requestParam) {
-        // 名称重复校验
+        // 获取当前用户信息
+        Long currentUserId = UserContext.getCurrentUserId();
+        if (currentUserId == null) {
+            throw new BusinessException("用户ID为空");
+        }
+        UserRoleEnum userRole = UserContext.getCurrentUserRole();
+
+        // 根据用户角色确定知识库作用域
+        // 管理员创建系统知识库，普通用户创建用户知识库
+        KnowledgeScopeEnum scope = (userRole == UserRoleEnum.ADMIN)
+                ? KnowledgeScopeEnum.SYSTEM
+                : KnowledgeScopeEnum.USER;
+
+        // 名称重复校验（在同一作用域下）
         String name = requestParam.getName().replaceAll("\\s+", "");
         Long count = knowledgeBaseMapper.selectCount(
                 new LambdaQueryWrapper<KnowledgeBaseEntity>()
                         .eq(KnowledgeBaseEntity::getName, name)
+                        .eq(KnowledgeBaseEntity::getScope, scope)
+                        .eq(KnowledgeBaseEntity::getCreatedBy, currentUserId)
         );
         if (count > 0) {
             throw new BusinessException("知识库名称已存在：" + requestParam.getName());
         }
 
+        // 创建知识库
         KnowledgeBaseEntity kb = KnowledgeBaseEntity.builder()
                 .name(requestParam.getName())
+                .description(requestParam.getDescription())
+                .scope(scope)
                 .embeddingModel(requestParam.getEmbeddingModel())
                 .collectionName(requestParam.getCollectionName())
-                .createdBy(StpUtil.getLoginIdAsLong())
-                .updatedBy(StpUtil.getLoginIdAsLong())
+                .createdBy(currentUserId)
+                .updatedBy(currentUserId)
                 .build();
-
         knowledgeBaseMapper.insert(kb);
 
+        // 创建存储桶
         String bucketName = requestParam.getCollectionName();
         try {
             s3Client.createBucket(builder -> builder.bucket(bucketName));
@@ -81,7 +114,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
             throw new BusinessException("存储桶名称已被占用：" + bucketName);
         }
 
-        // 确保向量空间存在，若不存在则创建
+        // 创建向量空间：确保向量空间存在，若不存在则创建
         VectorSpaceSpec spaceSpec = VectorSpaceSpec.builder()
                 .spaceId(VectorSpaceId.builder()
                         .logicalName(requestParam.getCollectionName())
@@ -90,15 +123,44 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
                 .build();
         vectorStoreService.ensureVectorSpace(spaceSpec);
 
+        // 创建该用户知识库的意图节点
+        String intentCode = "user_" + currentUserId + "_kb_" + kb.getId();
+        IntentNodeEntity intentNode = IntentNodeEntity.builder()
+                .kbId(kb.getId())
+                .intentCode(intentCode)
+                .scope(scope.getValue())
+                .name(kb.getName())
+                .level(IntentLevel.TOPIC.getCode())
+                .parentCode("user_knowledgeBase_category")
+                .description(kb.getDescription())
+                .examples(null)
+                .collectionName(kb.getCollectionName())
+                .kind(IntentKind.KB.getCode())
+                .enabled(1)
+                .createdBy(currentUserId)
+                .updatedBy(currentUserId)
+                .build();
+        intentNodeMapper.insert(intentNode);
+
+        log.info("用户 {} (角色:{}) 成功创建 {} 知识库，名称: {}", currentUserId, userRole, scope, requestParam.getName());
         return String.valueOf(kb.getId());
     }
 
     @Override
     public void update(KnowledgeBaseUpdateReq requestParam) {
+        // 获取当前用户信息
+        Long currentUserId = UserContext.getCurrentUserId();
+        if (currentUserId == null) {
+            throw new BusinessException("用户ID为空");
+        }
+
         KnowledgeBaseEntity kb = knowledgeBaseMapper.selectById(requestParam.getId());
         if (kb == null || kb.getDeleted() != null && kb.getDeleted() == 1) {
             throw new IllegalArgumentException("知识库不存在：" + requestParam.getId());
         }
+
+        // 权限校验
+        checkUpdatePermission(kb, currentUserId);
 
         if (StringUtils.hasText(requestParam.getEmbeddingModel())
                 && !requestParam.getEmbeddingModel().equals(kb.getEmbeddingModel())) {
@@ -120,26 +182,43 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
             kb.setName(requestParam.getName());
         }
 
-        kb.setUpdatedBy(StpUtil.getLoginIdAsLong());
+        if (requestParam.getDescription() != null) {
+            kb.setDescription(requestParam.getDescription());
+        }
+
+        kb.setUpdatedBy(currentUserId);
         knowledgeBaseMapper.updateById(kb);
+
+        log.info("用户 {} 成功更新知识库 {}", currentUserId, requestParam.getId());
     }
 
     @Override
     public void rename(String kbId, KnowledgeBaseUpdateReq requestParam) {
+        // 获取当前用户信息
+        Long currentUserId = UserContext.getCurrentUserId();
+        if (currentUserId == null) {
+            throw new BusinessException("用户ID为空");
+        }
+
         KnowledgeBaseEntity kb = knowledgeBaseMapper.selectById(kbId);
         if (kb == null || kb.getDeleted() != null && kb.getDeleted() == 1) {
             throw new BusinessException("知识库不存在");
         }
 
+        // 权限校验
+        checkUpdatePermission(kb, currentUserId);
+
         if (!StringUtils.hasText(requestParam.getName())) {
             throw new BusinessException("知识库名称不能为空");
         }
 
-        // 名称重复校验（排除当前知识库）
+        // 名称重复校验（在同一作用域下，排除当前知识库）
         String name = requestParam.getName().replaceAll("\\s+", "");
         Long count = knowledgeBaseMapper.selectCount(
                 Wrappers.lambdaQuery(KnowledgeBaseEntity.class)
                         .eq(KnowledgeBaseEntity::getName, name)
+                        .eq(KnowledgeBaseEntity::getScope, kb.getScope())
+                        .eq(KnowledgeBaseEntity::getCreatedBy, currentUserId)
                         .ne(KnowledgeBaseEntity::getId, kbId)
         );
         if (count > 0) {
@@ -147,14 +226,24 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         }
 
         kb.setName(requestParam.getName());
-        kb.setUpdatedBy(StpUtil.getLoginIdAsLong());
+        kb.setUpdatedBy(currentUserId);
         knowledgeBaseMapper.updateById(kb);
 
-        log.info("成功重命名知识库, kbId={}, newName={}", kbId, requestParam.getName());
+        log.info("用户 {} 成功重命名知识库 {}, 新名称: {}", currentUserId, kbId, requestParam.getName());
     }
 
     @Override
     public void delete(String kbId) {
+        Long currentUserId = StpUtil.getLoginIdAsLong();
+
+        KnowledgeBaseEntity kb = knowledgeBaseMapper.selectById(kbId);
+        if (kb == null || kb.getDeleted() != null && kb.getDeleted() == 1) {
+            throw new BusinessException("知识库不存在");
+        }
+
+        // 权限校验
+        checkUpdatePermission(kb, currentUserId);
+
         // 限制删除前需要确保没有文档
         Long docCount = knowledgeDocumentMapper.selectCount(
                 Wrappers.lambdaQuery(KnowledgeDocumentEntity.class)
@@ -165,23 +254,51 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         }
 
         knowledgeBaseMapper.deleteById(kbId);
+        log.info("用户 {} 成功删除知识库 {}", currentUserId, kbId);
     }
 
     @Override
     public KnowledgeBaseResp queryById(String kbId) {
+        Long currentUserId = StpUtil.getLoginIdAsLong();
+        boolean isAdmin = isAdmin();
+
         KnowledgeBaseEntity kb = knowledgeBaseMapper.selectById(kbId);
         if (kb == null || kb.getDeleted() != null && kb.getDeleted() == 1) {
             throw new BusinessException("知识库不存在");
         }
+
+        // 权限校验：普通用户只能查看自己的用户知识库
+        if (!isAdmin && kb.getScope() == KnowledgeScopeEnum.USER) {
+            if (!kb.getCreatedBy().equals(currentUserId)) {
+                throw new BusinessException("无权访问该知识库");
+            }
+        } else if (!isAdmin && kb.getScope() == KnowledgeScopeEnum.SYSTEM) {
+            throw new BusinessException("无权访问系统知识库");
+        }
+
         return BeanUtil.toBean(kb, KnowledgeBaseResp.class);
     }
 
     @Override
     public IPage<KnowledgeBaseResp> pageQuery(KnowledgeBasePageReq requestParam) {
+        Long currentUserId = StpUtil.getLoginIdAsLong();
+        boolean isAdmin = isAdmin();
+
         LambdaQueryWrapper<KnowledgeBaseEntity> queryWrapper = Wrappers.lambdaQuery(KnowledgeBaseEntity.class)
                 .like(StringUtils.hasText(requestParam.getName()), KnowledgeBaseEntity::getName, requestParam.getName())
-                .eq(KnowledgeBaseEntity::getDeleted, 0)
-                .orderByDesc(KnowledgeBaseEntity::getUpdatedAt);
+                .eq(KnowledgeBaseEntity::getDeleted, 0);
+
+        // 权限过滤
+        if (!isAdmin) {
+            // 普通用户只能查看自己的用户知识库
+            queryWrapper.eq(KnowledgeBaseEntity::getScope, KnowledgeScopeEnum.USER)
+                    .eq(KnowledgeBaseEntity::getCreatedBy, currentUserId);
+        } else if (requestParam.getScope() != null) {
+            // 管理员可以根据scope筛选
+            queryWrapper.eq(KnowledgeBaseEntity::getScope, requestParam.getScope());
+        }
+
+        queryWrapper.orderByDesc(KnowledgeBaseEntity::getUpdatedAt);
 
         Page<KnowledgeBaseEntity> page = new Page<>(requestParam.getCurrent(), requestParam.getSize());
         IPage<KnowledgeBaseEntity> result = knowledgeBaseMapper.selectPage(page, queryWrapper);
@@ -221,5 +338,39 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
             resp.setDocumentCount(docCount != null ? docCount : 0L);
             return resp;
         });
+    }
+
+    /**
+     * 检查用户是否有更新权限
+     * - 管理员可以更新所有知识库
+     * - 普通用户只能更新自己创建的用户知识库
+     *
+     * @param kb           知识库实体
+     * @param currentUserId 当前用户ID
+     */
+    private void checkUpdatePermission(KnowledgeBaseEntity kb, Long currentUserId) {
+        boolean isAdmin = isAdmin();
+
+        if (!isAdmin) {
+            // 普通用户只能更新自己创建的用户知识库
+            if (kb.getScope() == KnowledgeScopeEnum.SYSTEM) {
+                throw new BusinessException("无权操作系统知识库");
+            }
+            if (!kb.getCreatedBy().equals(currentUserId)) {
+                throw new BusinessException("无权操作其他用户的知识库");
+            }
+        }
+    }
+
+    /**
+     * 判断当前用户是否为管理员
+     * 从用户上下文中获取当前用户的角色信息
+     *
+     * @return 如果是管理员返回true，否则返回false
+     */
+    private boolean isAdmin() {
+        UserRoleEnum role = UserContext.getCurrentUserRole();
+        // 如果用户上下文中没有角色信息，默认返回false（普通用户）
+        return role == UserRoleEnum.ADMIN;
     }
 }

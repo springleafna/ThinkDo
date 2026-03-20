@@ -4,6 +4,10 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
+/**
+ * Common模块的Web配置
+ * 主要用于配置跨域等通用Web设置
+ */
 @Configuration
 public class WebConfig implements WebMvcConfigurer {
 

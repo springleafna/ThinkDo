@@ -81,7 +81,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserEntity> impleme
             throw new BusinessException("用户名或密码错误");
         }
 
+        // 执行登录
         StpUtil.login(user.getId());
+
+        // 将用户信息存储到 Session 中，方便后续使用
+        StpUtil.getSession().set("username", user.getUsername());
+        StpUtil.getSession().set("userId", user.getId());
+
         log.info("用户登录成功, username={}", username);
 
         return StpUtil.getTokenValue();

@@ -8,4 +8,11 @@ public class ChatConstant {
      */
     public static final String CONVERSATION_TITLE_PROMPT_PATH = "prompt/conversation-title.st";
 
+    /**
+     * 意图识别提示词模板路径（串行模式）
+     * 一次性发送所有意图节点给 LLM 进行识别
+     */
+    public static final String INTENT_CLASSIFIER_PROMPT_PATH = "prompt/intent-classifier.st";
+
+
 }

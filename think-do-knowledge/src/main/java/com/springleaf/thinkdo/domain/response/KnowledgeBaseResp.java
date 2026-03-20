@@ -1,5 +1,6 @@
 package com.springleaf.thinkdo.domain.response;
 
+import com.springleaf.thinkdo.enums.KnowledgeScopeEnum;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -19,6 +20,16 @@ public class KnowledgeBaseResp {
      * 知识库名称
      */
     private String name;
+
+    /**
+     * 知识库描述
+     */
+    private String description;
+
+    /**
+     * 知识库作用域
+     */
+    private KnowledgeScopeEnum scope;
 
     /**
      * 嵌入模型标识

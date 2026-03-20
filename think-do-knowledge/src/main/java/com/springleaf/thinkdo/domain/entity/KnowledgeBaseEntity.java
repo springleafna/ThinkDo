@@ -1,6 +1,7 @@
 package com.springleaf.thinkdo.domain.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.springleaf.thinkdo.enums.KnowledgeScopeEnum;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -25,6 +26,16 @@ public class KnowledgeBaseEntity {
      * 知识库名称
      */
     private String name;
+
+    /**
+     * 知识库描述
+     */
+    private String description;
+
+    /**
+     * 知识库作用域：SYSTEM-系统知识库，USER-用户知识库
+     */
+    private KnowledgeScopeEnum scope;
 
     /**
      * 嵌入模型标识，如：qwen3-embedding:8b-fp16
