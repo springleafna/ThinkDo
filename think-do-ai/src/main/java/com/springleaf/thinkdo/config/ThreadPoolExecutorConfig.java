@@ -76,4 +76,61 @@ public class ThreadPoolExecutorConfig {
         return TtlExecutors.getTtlExecutor(executor);
     }
 
+    /**
+     * RAG上下文处理线程池
+     */
+    @Bean
+    public Executor ragContextThreadPoolExecutor() {
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(
+                2,
+                4,
+                60,
+                TimeUnit.SECONDS,
+                new SynchronousQueue<>(),
+                ThreadFactoryBuilder.create()
+                        .setNamePrefix("rag_context_executor_")
+                        .build(),
+                new ThreadPoolExecutor.CallerRunsPolicy()
+        );
+        return TtlExecutors.getTtlExecutor(executor);
+    }
+
+    /**
+     * RAG 检索线程池（用于通道级别的并行）
+     */
+    @Bean
+    public Executor ragRetrievalThreadPoolExecutor() {
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(
+                CPU_COUNT,
+                CPU_COUNT << 1,
+                60,
+                TimeUnit.SECONDS,
+                new SynchronousQueue<>(),
+                ThreadFactoryBuilder.create()
+                        .setNamePrefix("rag_retrieval_executor_")
+                        .build(),
+                new ThreadPoolExecutor.CallerRunsPolicy()
+        );
+        return TtlExecutors.getTtlExecutor(executor);
+    }
+
+    /**
+     * RAG 内部检索线程池
+     */
+    @Bean
+    public Executor ragInnerRetrievalThreadPoolExecutor() {
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(
+                CPU_COUNT << 1,
+                CPU_COUNT << 2,
+                60,
+                TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(100),
+                ThreadFactoryBuilder.create()
+                        .setNamePrefix("rag_inner_retrieval_executor_")
+                        .build(),
+                new ThreadPoolExecutor.CallerRunsPolicy()
+        );
+        return TtlExecutors.getTtlExecutor(executor);
+    }
+
 }

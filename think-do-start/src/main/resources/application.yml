@@ -105,6 +105,15 @@ rag:
     enabled: true
     max-history-messages: 4
     max-history-chars: 500
+
+  search:
+    channels:
+      vector-global:
+        confidence-threshold: 0.6
+        top-k-multiplier: 3
+      intent-directed:
+        min-intent-score: 0.4
+        top-k-multiplier: 2
 # Sa-Token配置
 sa-token:
   # token名称 (同时也是cookie名称)

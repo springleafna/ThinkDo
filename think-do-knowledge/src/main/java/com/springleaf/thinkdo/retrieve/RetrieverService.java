@@ -46,8 +46,6 @@ public interface RetrieverService {
         RetrieveRequest req = RetrieveRequest.builder()
                 .query(query)
                 .topK(topK)
-                // TODO: 待修改
-                .collectionName("thinkdo1")
                 .build();
         return retrieve(req);
     }

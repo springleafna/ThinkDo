@@ -1,16 +1,26 @@
 package com.springleaf.thinkdo.service.impl;
 
 import cn.dev33.satoken.stp.StpUtil;
+import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import com.springleaf.thinkdo.chat.ChatMessage;
 import com.springleaf.thinkdo.chat.ChatRequest;
 import com.springleaf.thinkdo.chat.LLMService;
 import com.springleaf.thinkdo.chat.stream.StreamCallback;
+import com.springleaf.thinkdo.chat.stream.StreamCancellationHandle;
 import com.springleaf.thinkdo.chat.stream.handler.StreamCallbackFactory;
 import com.springleaf.thinkdo.chat.stream.handler.StreamTaskManager;
-import com.springleaf.thinkdo.domain.dto.RetrievedChunk;
-import com.springleaf.thinkdo.retrieve.RetrieverService;
+import com.springleaf.thinkdo.domain.dto.IntentGroup;
+import com.springleaf.thinkdo.domain.dto.RetrievalContext;
+import com.springleaf.thinkdo.domain.dto.SubQuestionIntent;
+import com.springleaf.thinkdo.intent.IntentResolver;
+import com.springleaf.thinkdo.prompt.PromptTemplateLoader;
+import com.springleaf.thinkdo.retrieve.RetrievalEngine;
+import com.springleaf.thinkdo.retrieve.prompt.PromptContext;
+import com.springleaf.thinkdo.retrieve.prompt.RAGPromptService;
+import com.springleaf.thinkdo.rewrite.QueryRewriteService;
+import com.springleaf.thinkdo.rewrite.RewriteResult;
 import com.springleaf.thinkdo.service.MessageService;
 import com.springleaf.thinkdo.service.RagChatService;
 import lombok.RequiredArgsConstructor;
@@ -18,8 +28,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.util.ArrayList;
 import java.util.List;
 
+import static com.springleaf.thinkdo.constant.RAGConstant.CHAT_SYSTEM_PROMPT_PATH;
 import static com.springleaf.thinkdo.constant.RAGConstant.DEFAULT_TOP_K;
 
 @Service
@@ -31,7 +43,11 @@ public class RagChatServiceImpl implements RagChatService {
     private final StreamCallbackFactory callbackFactory;
     private final MessageService messageService;
     private final StreamTaskManager taskManager;
-    private final RetrieverService retrieverService;
+    private final QueryRewriteService queryRewriteService;
+    private final IntentResolver intentResolver;
+    private final RetrievalEngine retrievalEngine;
+    private final PromptTemplateLoader promptTemplateLoader;
+    private final RAGPromptService promptBuilder;
 
     @Override
     public void streamChat(String question, String conversationId, Boolean deepThinking, Boolean useKnowledgeBase, SseEmitter emitter) {
@@ -48,62 +64,94 @@ public class RagChatServiceImpl implements RagChatService {
         messageService.append(actualConversationId, userId, new ChatMessage(ChatMessage.Role.USER, question));
         
         // 加载历史消息
-        List<ChatMessage> messages = messageService.load(actualConversationId, userId);
+        List<ChatMessage> history = messageService.load(actualConversationId, userId);
         
         // RAG流程：根据检索到的知识构建系统提示词
         if (knowledgeBaseEnabled) {
-            // 从向量库检索相关文档
-            List<RetrievedChunk> retrievedChunks = retrieverService.retrieve(question, DEFAULT_TOP_K);
-            log.info("检索到 {} 条相关文档", retrievedChunks.size());
-            
-            // 如果检索到了相关文档，构建 RAG 系统提示词
-            if (!retrievedChunks.isEmpty()) {
-                String ragSystemPrompt = buildRAGSystemPrompt(retrievedChunks);
-                
-                // 将 RAG 系统提示词插入到消息列表的开头
-                messages.add(0, new ChatMessage(ChatMessage.Role.SYSTEM, ragSystemPrompt));
-                log.info("已添加 RAG 系统提示词，知识库上下文长度：{} 字符", ragSystemPrompt.length());
-            } else {
-                log.warn("未检索到相关文档，使用普通对话模式");
+            // 问题拆分
+            RewriteResult rewriteResult = queryRewriteService.rewriteWithSplit(question, history);
+            // 获取每个子问题及其意图结果
+            List<SubQuestionIntent> subIntents = intentResolver.resolve(rewriteResult, userId);
+            // 根据意图节点进行向量化检索
+            RetrievalContext ctx = retrievalEngine.retrieve(subIntents, DEFAULT_TOP_K);
+            if (ctx.isEmpty()) {
+                String emptyReply = "未检索到与问题相关的文档内容。";
+                callback.onContent(emptyReply);
+                callback.onComplete();
+                return;
             }
+
+            // 聚合所有意图用于 prompt 规划
+            IntentGroup mergedGroup = intentResolver.mergeIntentGroup(subIntents);
+
+            StreamCancellationHandle handle = streamLLMResponse(
+                    rewriteResult,
+                    ctx,
+                    mergedGroup,
+                    history,
+                    thinkingEnabled,
+                    callback
+            );
+            taskManager.bindHandle(taskId, handle);
+            return;
         }
-        
-        // 构建请求并调用 LLM
+
+        // 未启用知识库则是普通对话场景
+        StreamCancellationHandle handle = streamSystemResponse(question, history, "", callback);
+        taskManager.bindHandle(taskId, handle);
+    }
+
+    private StreamCancellationHandle streamLLMResponse(RewriteResult rewriteResult, RetrievalContext ctx,
+                                                       IntentGroup intentGroup, List<ChatMessage> history,
+                                                       boolean deepThinking, StreamCallback callback) {
+        PromptContext promptContext = PromptContext.builder()
+                .question(rewriteResult.rewrittenQuestion())
+                .mcpContext(ctx.getMcpContext())
+                .kbContext(ctx.getKbContext())
+                .mcpIntents(intentGroup.mcpIntents())
+                .kbIntents(intentGroup.kbIntents())
+                .intentChunks(ctx.getIntentChunks())
+                .build();
+
+        List<ChatMessage> messages = promptBuilder.buildStructuredMessages(
+                promptContext,
+                history,
+                rewriteResult.rewrittenQuestion(),
+                rewriteResult.subQuestions()  // 传入子问题列表
+        );
         ChatRequest chatRequest = ChatRequest.builder()
                 .messages(messages)
                 .thinking(deepThinking)
+                .temperature(ctx.hasMcp() ? 0.3D : 0D)  // MCP 场景稍微放宽温度
+                .topP(ctx.hasMcp() ? 0.8D : 1D)
                 .build();
-        llmService.streamChat(chatRequest, callback);
-    }
-    
-    /**
-     * 构建 RAG 系统提示词
-     * 
-     * @param retrievedChunks 检索到的文档块列表
-     * @return 系统提示词
-     */
-    private String buildRAGSystemPrompt(List<RetrievedChunk> retrievedChunks) {
-        StringBuilder contextBuilder = new StringBuilder();
-        contextBuilder.append("你是一个智能助手，需要基于以下知识库内容回答用户问题。\n\n");
-        contextBuilder.append("【知识库内容】\n");
-        
-        for (int i = 0; i < retrievedChunks.size(); i++) {
-            RetrievedChunk chunk = retrievedChunks.get(i);
-            contextBuilder.append(String.format("[文档%d 相似度: %.2f]\n%s\n\n", 
-                    i + 1, chunk.getScore(), chunk.getText()));
-        }
-        
-        contextBuilder.append("【回答要求】\n");
-        contextBuilder.append("1. 请优先使用上述知识库内容回答用户问题\n");
-        contextBuilder.append("2. 如果知识库内容不足以回答问题，可以基于你的训练知识补充，但要说明\n");
-        contextBuilder.append("3. 回答时要准确、客观，引用知识库内容时请标注来源\n");
-        contextBuilder.append("4. 如果知识库内容与用户问题无关，请直接说明，不要强行回答\n");
-        
-        return contextBuilder.toString();
+
+        return llmService.streamChat(chatRequest, callback);
     }
 
     @Override
     public void stopTask(String taskId) {
         taskManager.cancel(taskId);
+    }
+
+    private StreamCancellationHandle streamSystemResponse(String question, List<ChatMessage> history,
+                                                          String customPrompt, StreamCallback callback) {
+        String systemPrompt = StrUtil.isNotBlank(customPrompt)
+                ? customPrompt
+                : promptTemplateLoader.load(CHAT_SYSTEM_PROMPT_PATH);
+
+        List<ChatMessage> messages = new ArrayList<>();
+        messages.add(ChatMessage.system(systemPrompt));
+        if (CollUtil.isNotEmpty(history)) {
+            messages.addAll(history.subList(0, history.size() - 1));
+        }
+        messages.add(ChatMessage.user(question));
+
+        ChatRequest req = ChatRequest.builder()
+                .messages(messages)
+                .temperature(0.7D)
+                .thinking(false)
+                .build();
+        return llmService.streamChat(req, callback);
     }
 }

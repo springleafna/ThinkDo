@@ -200,8 +200,9 @@ public class DefaultIntentClassifier implements IntentClassifier, IntentNodeRegi
      * 每次调用都会重新从Redis读取，确保数据是最新的
      */
     public IntentTreeData loadIntentTreeData(Long userId) {
+        // TODO: 需要从redis中获取每个用户的意图树
         // 1. 从Redis读取（如果不存在会自动从数据库加载）
-        List<IntentNode> roots = intentTreeCacheManager.getIntentTreeFromCache();
+       /* List<IntentNode> roots = intentTreeCacheManager.getIntentTreeFromCache();
 
         // 2. 如果Redis也没有，从数据库加载并缓存
         if (CollUtil.isEmpty(roots)) {
@@ -209,7 +210,9 @@ public class DefaultIntentClassifier implements IntentClassifier, IntentNodeRegi
             if (!roots.isEmpty()) {
                 intentTreeCacheManager.saveIntentTreeToCache(roots);
             }
-        }
+        }*/
+
+        List<IntentNode> roots = loadIntentTreeFromDB(userId);
 
         // 3. 构建内存结构（临时使用）
         if (CollUtil.isEmpty(roots)) {
