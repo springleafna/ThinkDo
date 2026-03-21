@@ -100,6 +100,11 @@ rag:
     collection-name: rag_default_store
     dimension: 4096
     metric-type: COSINE
+
+  query-rewrite:
+    enabled: true
+    max-history-messages: 4
+    max-history-chars: 500
 # Sa-Token配置
 sa-token:
   # token名称 (同时也是cookie名称)

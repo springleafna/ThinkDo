@@ -5,10 +5,7 @@ import com.alibaba.ttl.threadpool.TtlExecutors;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-import java.util.concurrent.Executor;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 /**
  * 线程池执行器配置类
@@ -54,6 +51,25 @@ public class ThreadPoolExecutorConfig {
                 new LinkedBlockingQueue<>(200),
                 ThreadFactoryBuilder.create()
                         .setNamePrefix("kb_chunk_executor_")
+                        .build(),
+                new ThreadPoolExecutor.CallerRunsPolicy()
+        );
+        return TtlExecutors.getTtlExecutor(executor);
+    }
+
+    /**
+     * 意图识别并行执行线程池
+     */
+    @Bean
+    public Executor intentClassifyThreadPoolExecutor() {
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(
+                CPU_COUNT,
+                CPU_COUNT << 1,
+                60,
+                TimeUnit.SECONDS,
+                new SynchronousQueue<>(),
+                ThreadFactoryBuilder.create()
+                        .setNamePrefix("intent_classify_executor_")
                         .build(),
                 new ThreadPoolExecutor.CallerRunsPolicy()
         );

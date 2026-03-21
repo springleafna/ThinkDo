@@ -3,7 +3,10 @@ package com.springleaf.thinkdo.test;
 import com.springleaf.thinkdo.ThinkDoApplication;
 import com.springleaf.thinkdo.intent.DefaultIntentClassifier;
 import com.springleaf.thinkdo.intent.IntentNode;
+import com.springleaf.thinkdo.intent.IntentResolver;
 import com.springleaf.thinkdo.intent.NodeScore;
+import com.springleaf.thinkdo.rewrite.QueryRewriteService;
+import com.springleaf.thinkdo.rewrite.RewriteResult;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,10 +24,20 @@ public class IntentTreeTest {
 
     @Autowired
     private DefaultIntentClassifier classifier;
+    @Autowired
+    private IntentResolver intentResolver;
+    @Autowired
+    private QueryRewriteService queryRewriteService;
 
     // 预设测试参数
     private static final Long TEST_USER_ID = 10001L;
-    private static final String TEST_QUESTION = "解释一下SpringBoot";
+    private static final String TEST_QUESTION = "该平台中主要具备哪些功能？请简单解释一下，并告知我该系统的架构设计?已经我的笔记大概有哪些内容，帮我查一下谢谢";
+
+    @Test
+    public void testIntentResolver() {
+        RewriteResult rewriteResult = queryRewriteService.rewriteWithSplit(TEST_QUESTION);
+        intentResolver.resolve(rewriteResult, TEST_USER_ID);
+    }
 
     @Test
     public void testLoadIntentTreeFromDB() {
