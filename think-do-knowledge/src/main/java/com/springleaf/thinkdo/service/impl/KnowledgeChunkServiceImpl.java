@@ -139,7 +139,7 @@ public class KnowledgeChunkServiceImpl implements KnowledgeChunkService {
                     .toList();
             if (CollUtil.isNotEmpty(vectorChunks)) {
                 attachEmbeddings(vectorChunks, embeddingModel);
-                vectorStoreService.indexDocumentChunks(kbIdStr, docId, vectorChunks);
+                vectorStoreService.indexDocumentChunks(kbIdStr, docId, vectorChunks, userId);
             }
         }
     }

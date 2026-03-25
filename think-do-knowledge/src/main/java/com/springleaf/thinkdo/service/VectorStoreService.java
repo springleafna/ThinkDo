@@ -18,9 +18,10 @@ public interface VectorStoreService {
      * @param kbId   知识库唯一标识
      * @param docId  文档唯一标识
      * @param chunks 文档切片列表，包含文本内容、chunk索引等信息
+     * @param userId 用户ID，用于多租户隔离
      * @throws IllegalArgumentException 当参数为空或无效时抛出
      */
-    void indexDocumentChunks(String kbId, String docId, List<VectorChunk> chunks);
+    void indexDocumentChunks(String kbId, String docId, List<VectorChunk> chunks, Long userId);
 
     /**
      * 更新单个 chunk 的向量索引

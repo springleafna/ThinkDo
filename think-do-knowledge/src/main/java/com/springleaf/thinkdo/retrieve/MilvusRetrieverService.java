@@ -2,6 +2,7 @@ package com.springleaf.thinkdo.retrieve;
 
 import cn.hutool.core.util.StrUtil;
 import com.springleaf.thinkdo.config.RAGDefaultProperties;
+import com.springleaf.thinkdo.context.UserContext;
 import com.springleaf.thinkdo.domain.dto.RetrievedChunk;
 import com.springleaf.thinkdo.embedding.EmbeddingService;
 import io.milvus.v2.client.MilvusClientV2;
@@ -46,6 +47,19 @@ public class MilvusRetrieverService implements RetrieverService {
         params.put("metric_type", ragDefaultProperties.getMetricType());
         params.put("ef", 128);
 
+        // 构建 filter 表达式（多租户隔离）
+        String filter = null;
+        if (retrieveParam.getUserId() != null) {
+            filter = "user_id == \"" + retrieveParam.getUserId() + "\"";
+        } else {
+            // 如果请求中没有 userId，从上下文获取
+            Long currentUserId = UserContext.getCurrentUserId();
+            if (currentUserId != null) {
+                filter = "user_id == \"" + currentUserId + "\"";
+            }
+        }
+
+        // 构建 SearchReq
         SearchReq req = SearchReq.builder()
                 .collectionName(
                         StrUtil.isBlank(retrieveParam.getCollectionName()) ? ragDefaultProperties.getCollectionName() : retrieveParam.getCollectionName()
@@ -55,6 +69,7 @@ public class MilvusRetrieverService implements RetrieverService {
                 .topK(retrieveParam.getTopK())
                 .searchParams(params)
                 .outputFields(List.of("doc_id", "content", "metadata"))
+                .filter(filter)
                 .build();
 
         SearchResp resp = milvusClient.search(req);

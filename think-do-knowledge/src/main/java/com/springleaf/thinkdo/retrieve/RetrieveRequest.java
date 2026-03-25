@@ -38,6 +38,11 @@ public class RetrieveRequest {
     private String collectionName;
 
     /**
+     * 用户ID（多租户隔离）
+     */
+    private Long userId;
+
+    /**
      * 元数据等值过滤条件（扩展项）：
      * - key 为 metadata 字段名
      * - value 为匹配值

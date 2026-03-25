@@ -28,16 +28,43 @@ public class LocalFileStorageServiceImpl implements FileStorageService {
     private static final Tika TIKA = new Tika();
 
     /**
-     * 上传文件到指定的S3存储桶，并返回文件的元数据信息。
+     * 上传文件到指定的S3存储桶根目录
      *
      * @param bucketName 目标S3存储桶名称，不能为空
-     * @param file       待上传的MultipartFile对象，不能为空且不能为empty
-     * @return StoredFileDTO 包含文件URL、类型、大小和原始文件名的元数据对象
-     * @throws IllegalArgumentException 当bucketName为空或文件为空时抛出
+     * @param file       待上传的文件
+     * @return 文件元数据信息
      */
     @Override
     @SneakyThrows
     public StoredFileDTO upload(String bucketName, MultipartFile file) {
+        return upload(bucketName, file, null);
+    }
+
+    /**
+     * 上传字节数组到指定的S3存储桶根目录
+     *
+     * @param bucketName      目标S3存储桶名称
+     * @param content         文件内容
+     * @param originalFilename 原始文件名
+     * @param contentType     文件MIME类型
+     * @return 文件元数据信息
+     */
+    @Override
+    public StoredFileDTO upload(String bucketName, byte[] content, String originalFilename, String contentType) {
+        return upload(bucketName, content, originalFilename, contentType, null);
+    }
+
+    /**
+     * 上传文件到指定的S3存储桶，使用自定义路径前缀（多租户隔离）
+     *
+     * @param bucketName 目标S3存储桶名称
+     * @param file       待上传的文件
+     * @param pathPrefix 路径前缀，例如 "123456/kb_789/"
+     * @return 文件元数据信息
+     */
+    @Override
+    @SneakyThrows
+    public StoredFileDTO upload(String bucketName, MultipartFile file, String pathPrefix) {
         // 校验bucketName和文件的有效性
         if (!StringUtils.hasText(bucketName)) {
             throw new IllegalArgumentException("bucketName 不能为空");
@@ -58,23 +85,22 @@ public class LocalFileStorageServiceImpl implements FileStorageService {
 
         // 重新获取输入流并调用内部上传方法
         try (InputStream uploadIs = file.getInputStream()) {
-            return uploadInternal(bucketName, uploadIs, size, originalFilename, detected);
+            return uploadInternal(bucketName, uploadIs, size, originalFilename, detected, pathPrefix);
         }
     }
 
-
     /**
-     * 上传字节数组形式的文件内容到指定的S3存储桶，并返回文件的元数据信息。
+     * 上传字节数组到指定的S3存储桶，使用自定义路径前缀（多租户隔离）
      *
-     * @param bucketName      目标S3存储桶名称，不能为空
-     * @param content         文件内容的字节数组，不能为空
-     * @param originalFilename 原始文件名，可能为null
-     * @param contentType     文件的MIME类型，若为空或空白则自动检测
-     * @return StoredFileDTO  包含文件URL、类型、大小和原始文件名的元数据对象
-     * @throws IllegalArgumentException 当bucketName为空或content为null时抛出
+     * @param bucketName      目标S3存储桶名称
+     * @param content         文件内容
+     * @param originalFilename 原始文件名
+     * @param contentType     文件MIME类型
+     * @param pathPrefix      路径前缀，例如 "123456/kb_789/"
+     * @return 文件元数据信息
      */
     @Override
-    public StoredFileDTO upload(String bucketName, byte[] content, String originalFilename, String contentType) {
+    public StoredFileDTO upload(String bucketName, byte[] content, String originalFilename, String contentType, String pathPrefix) {
         // 校验bucketName和content的有效性
         if (!StringUtils.hasText(bucketName)) {
             throw new IllegalArgumentException("bucketName 不能为空");
@@ -90,7 +116,7 @@ public class LocalFileStorageServiceImpl implements FileStorageService {
         }
 
         // 调用内部上传方法完成文件上传
-        return uploadInternal(bucketName, new ByteArrayInputStream(content), content.length, originalFilename, detected);
+        return uploadInternal(bucketName, new ByteArrayInputStream(content), content.length, originalFilename, detected, pathPrefix);
     }
 
     @Override
@@ -137,29 +163,57 @@ public class LocalFileStorageServiceImpl implements FileStorageService {
     }
 
     /**
-     * 上传文件到指定的S3存储桶，并返回文件的元数据信息。
-     *
-     * @param bucketName          目标S3存储桶名称，不能为空
-     * @param inputStream         文件输入流，包含待上传的文件内容
-     * @param size                文件大小（字节）
-     * @param originalFilename    原始文件名，可能为null
-     * @param detectedContentType 检测到的文件MIME类型
-     * @return StoredFileDTO      包含文件URL、类型、大小和原始文件名的元数据对象
+     * 上传文件到指定的S3存储桶（根目录），并返回文件的元数据信息
      */
     private StoredFileDTO uploadInternal(String bucketName,
                                          InputStream inputStream,
                                          long size,
                                          String originalFilename,
                                          String detectedContentType) {
+        return uploadInternal(bucketName, inputStream, size, originalFilename, detectedContentType, null);
+    }
+
+    /**
+     * 上传文件到指定的S3存储桶，支持路径前缀（多租户隔离），并返回文件的元数据信息
+     *
+     * @param bucketName          目标S3存储桶名称，不能为空
+     * @param inputStream         文件输入流，包含待上传的文件内容
+     * @param size                文件大小（字节）
+     * @param originalFilename    原始文件名，可能为null
+     * @param detectedContentType 检测到的文件MIME类型
+     * @param pathPrefix          路径前缀，例如 "123456/kb_789/"，可为null
+     * @return StoredFileDTO      包含文件URL、类型、大小和原始文件名的元数据对象
+     */
+    private StoredFileDTO uploadInternal(String bucketName,
+                                         InputStream inputStream,
+                                         long size,
+                                         String originalFilename,
+                                         String detectedContentType,
+                                         String pathPrefix) {
         // 处理原始文件名，若为null则替换为空字符串
         String safeName = originalFilename == null ? "" : originalFilename;
 
         // 提取文件后缀名
         String suffix = extractSuffix(safeName);
 
-        // 生成唯一的S3对象键（key），结合UUID和文件后缀
-        String s3Key = UUID.randomUUID().toString().replace("-", "")
-                + (suffix.isBlank() ? "" : "." + suffix);
+        // 生成唯一的S3对象键（key）
+        String uuid = UUID.randomUUID().toString().replace("-", "");
+        String fileName = uuid + (suffix.isBlank() ? "" : "." + suffix);
+
+        // 构建完整的S3对象键：路径前缀 + 文件名
+        String s3Key;
+        if (StringUtils.hasText(pathPrefix)) {
+            // 规范化路径前缀：确保不以 / 开头，以 / 结尾
+            String normalizedPrefix = pathPrefix.startsWith("/")
+                ? pathPrefix.substring(1)
+                : pathPrefix;
+            if (!normalizedPrefix.endsWith("/")) {
+                normalizedPrefix += "/";
+            }
+            s3Key = normalizedPrefix + fileName;
+        } else {
+            s3Key = fileName;
+        }
 
         // 将文件上传到S3存储桶
         s3Client.putObject(

@@ -1,6 +1,5 @@
 package com.springleaf.thinkdo.service.impl;
 
-import cn.hutool.core.lang.Assert;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.springleaf.thinkdo.config.RAGDefaultProperties;
@@ -39,7 +38,7 @@ public class VectorStoreServiceImpl implements VectorStoreService {
     private final RAGDefaultProperties ragDefaultProperties;
 
     @Override
-    public void indexDocumentChunks(String kbId, String docId, List<VectorChunk> chunks) {
+    public void indexDocumentChunks(String kbId, String docId, List<VectorChunk> chunks, Long userId) {
         if (chunks == null || chunks.isEmpty()) {
             throw new BusinessException("文档分块不允许为空");
         }
@@ -63,12 +62,13 @@ public class VectorStoreServiceImpl implements VectorStoreService {
             }
 
             JsonObject metadata = new JsonObject();
-            metadata.addProperty("kb_id", kbId);
             metadata.addProperty("doc_id", docId);
             metadata.addProperty("chunk_index", chunk.getIndex());
 
             JsonObject row = new JsonObject();
             row.addProperty("doc_id", chunk.getChunkId());
+            row.addProperty("user_id", String.valueOf(userId));
+            row.addProperty("kb_id", kbId);
             row.addProperty("content", content);
             row.add("metadata", metadata);
             row.add("embedding", toJsonArray(vectors.get(i)));
@@ -129,8 +129,8 @@ public class VectorStoreServiceImpl implements VectorStoreService {
 
         String collection = kb.getCollectionName();
 
-        // 按 JSON 过滤：删除该 kbId 下、该文档ID 的所有 chunk
-        String filter = "metadata[\"kb_id\"] == \"" + kbId + "\" && " +
+        // 使用独立字段过滤：删除该 kbId 下、该文档ID 的所有 chunk
+        String filter = "kb_id == \"" + kbId + "\" && " +
                 "metadata[\"doc_id\"] == \"" + docId + "\"";
 
         DeleteReq deleteReq = DeleteReq.builder()
@@ -169,6 +169,24 @@ public class VectorStoreServiceImpl implements VectorStoreService {
                         .maxLength(36)
                         .isPrimaryKey(true)
                         .autoID(false)
+                        .build()
+        );
+
+        // user_id 字段：多租户隔离
+        fieldSchemaList.add(
+                CreateCollectionReq.FieldSchema.builder()
+                        .name("user_id")
+                        .dataType(DataType.VarChar)
+                        .maxLength(36)
+                        .build()
+        );
+
+        // kb_id 字段：知识库 ID
+        fieldSchemaList.add(
+                CreateCollectionReq.FieldSchema.builder()
+                        .name("kb_id")
+                        .dataType(DataType.VarChar)
+                        .maxLength(36)
                         .build()
         );
 

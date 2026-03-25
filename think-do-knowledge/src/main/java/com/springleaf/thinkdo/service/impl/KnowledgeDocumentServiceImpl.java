@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.springleaf.thinkdo.constant.KnowledgeBaseConstant;
 import com.springleaf.thinkdo.document.chunk.*;
 import com.springleaf.thinkdo.document.parser.DocumentParserSelector;
 import com.springleaf.thinkdo.document.parser.ParserType;
@@ -19,6 +20,7 @@ import com.springleaf.thinkdo.domain.request.KnowledgeDocumentUploadReq;
 import com.springleaf.thinkdo.domain.response.KnowledgeDocumentResp;
 import com.springleaf.thinkdo.domain.response.KnowledgeDocumentSearchResp;
 import com.springleaf.thinkdo.enums.DocumentStatus;
+import com.springleaf.thinkdo.enums.KnowledgeScopeEnum;
 import com.springleaf.thinkdo.enums.SourceType;
 import com.springleaf.thinkdo.exception.BusinessException;
 import com.springleaf.thinkdo.mapper.KnowledgeBaseMapper;
@@ -97,8 +99,12 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
             throw new BusinessException("来源地址不能为空");
         }
 
-        // 上传文件并返回StoredFileDTO
-        StoredFileDTO stored = resolveStoredFile(kbEntity.getCollectionName(), sourceType, sourceLocation, file);
+        // 上传文件并返回StoredFileDTO（根据知识库作用域选择固定bucket）
+        String bucketName = (kbEntity.getScope() == KnowledgeScopeEnum.SYSTEM)
+                ? KnowledgeBaseConstant.SYSTEM_BUCKET
+                : KnowledgeBaseConstant.USER_BUCKET;
+        Long userId = StpUtil.getLoginIdAsLong();
+        StoredFileDTO stored = resolveStoredFile(bucketName, sourceType, sourceLocation, file, userId, kbId);
 
         // 解析分块策略和配置
         ChunkingMode chunkingMode = resolveChunkingMode(request == null ? null : request.getChunkStrategy());
@@ -284,7 +290,7 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
 
     @Override
     public void startChunk(String docId) {
-        long userId = StpUtil.getLoginIdAsLong();
+        Long userId = StpUtil.getLoginIdAsLong();
         // 使用分布式锁避免同一文档的并发分块
         String lockKey = String.format("knowledge:chunk:lock:%s", docId);
         RLock lock = redissonClient.getLock(lockKey);
@@ -404,7 +410,7 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
             String kbId = String.valueOf(document.getKbId());
             long embeddingStart = System.currentTimeMillis();
             vectorStoreService.deleteDocumentVectors(kbId, docId);
-            vectorStoreService.indexDocumentChunks(kbId, docId, chunkResults);
+            vectorStoreService.indexDocumentChunks(kbId, docId, chunkResults, userId);
             embeddingDuration = System.currentTimeMillis() - embeddingStart;
 
             long totalDuration = System.currentTimeMillis() - totalStartTime;
@@ -428,7 +434,7 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
      * 使用分块策略处理文档
      */
     private ChunkProcessResult runChunkProcess(KnowledgeDocumentEntity document, Long userId) {
-        String docId = String.valueOf(document.getId());
+        Long docId = document.getId();
         ChunkingMode chunkingMode = resolveChunkingMode(document.getChunkStrategy());
         String embeddingModel = resolveEmbeddingModel(document.getKbId());
         ChunkingOptions config = buildChunkingOptions(chunkingMode, document, embeddingModel);
@@ -621,22 +627,27 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
      * @param sourceType     文件来源类型（本地文件或远程链接）
      * @param sourceLocation 远程文件的URL地址（当sourceType不为FILE时使用）
      * @param file           本地上传的MultipartFile对象（当sourceType为FILE时使用）
+     * @param userId         用户ID，用于构建文件路径前缀
+     * @param kbId           知识库ID，用于构建文件路径前缀
      * @return StoredFileDTO 包含文件URL、类型、大小等元数据的对象
      * @throws BusinessException 当sourceType为FILE但file为空时抛出
      */
-    private StoredFileDTO resolveStoredFile(String bucketName, SourceType sourceType, String sourceLocation, MultipartFile file) {
+    private StoredFileDTO resolveStoredFile(String bucketName, SourceType sourceType, String sourceLocation, MultipartFile file, Long userId, String kbId) {
+        // 构建路径前缀：{userId}/kb_{kbId}/
+        String pathPrefix = userId + "/kb_" + kbId + "/";
+        
         // 处理本地文件上传逻辑
         if (SourceType.FILE == sourceType) {
             if (file == null) {
                 throw new BusinessException("上传文件不能为空");
             }
-            return fileStorageService.upload(bucketName, file);
+            return fileStorageService.upload(bucketName, file, pathPrefix);
         }
 
         // 处理远程文件抓取逻辑
         HttpClientHelper.HttpFetchResponse response = httpClientHelper.get(sourceLocation, Map.of());
         String fileName = StringUtils.hasText(response.fileName()) ? response.fileName() : "remote-file";
-        return fileStorageService.upload(bucketName, response.body(), fileName, response.contentType());
+        return fileStorageService.upload(bucketName, response.body(), fileName, response.contentType(), pathPrefix);
     }
 
 }

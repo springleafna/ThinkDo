@@ -1,12 +1,12 @@
 package com.springleaf.thinkdo.retrieve.channel;
 
 import cn.hutool.core.collection.CollUtil;
-import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.springleaf.thinkdo.constant.KnowledgeBaseConstant;
+import com.springleaf.thinkdo.context.UserContext;
+import com.springleaf.thinkdo.enums.UserRoleEnum;
 import com.springleaf.thinkdo.config.SearchChannelProperties;
 import com.springleaf.thinkdo.domain.dto.RetrievedChunk;
-import com.springleaf.thinkdo.domain.entity.KnowledgeBaseEntity;
 import com.springleaf.thinkdo.intent.NodeScore;
-import com.springleaf.thinkdo.mapper.KnowledgeBaseMapper;
 import com.springleaf.thinkdo.retrieve.RetrieverService;
 import com.springleaf.thinkdo.retrieve.channel.strategy.CollectionParallelRetriever;
 import lombok.extern.slf4j.Slf4j;
@@ -14,9 +14,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.Executor;
 
 /**
@@ -30,15 +28,12 @@ import java.util.concurrent.Executor;
 public class VectorGlobalSearchChannel implements SearchChannel {
 
     private final SearchChannelProperties properties;
-    private final KnowledgeBaseMapper knowledgeBaseMapper;
     private final CollectionParallelRetriever parallelRetriever;
 
     public VectorGlobalSearchChannel(RetrieverService retrieverService,
                                      SearchChannelProperties properties,
-                                     KnowledgeBaseMapper knowledgeBaseMapper,
                                      @Qualifier("ragInnerRetrievalThreadPoolExecutor") Executor innerRetrievalExecutor) {
         this.properties = properties;
-        this.knowledgeBaseMapper = knowledgeBaseMapper;
         this.parallelRetriever = new CollectionParallelRetriever(retrieverService, innerRetrievalExecutor);
     }
 
@@ -137,25 +132,16 @@ public class VectorGlobalSearchChannel implements SearchChannel {
     }
 
     /**
-     * 获取所有 KB 类型的 collection
+     * 获取当前用户对应的 collection
+     * 多租户模式下，用户和系统使用固定的 collection
      */
     private List<String> getAllKBCollections() {
-        Set<String> collections = new HashSet<>();
-
-        // 从知识库表获取全量 collection（全局检索兜底）
-        List<KnowledgeBaseEntity> kbList = knowledgeBaseMapper.selectList(
-                Wrappers.lambdaQuery(KnowledgeBaseEntity.class)
-                        .select(KnowledgeBaseEntity::getCollectionName)
-                        .eq(KnowledgeBaseEntity::getDeleted, 0)
-        );
-        for (KnowledgeBaseEntity kb : kbList) {
-            String collectionName = kb.getCollectionName();
-            if (collectionName != null && !collectionName.isBlank()) {
-                collections.add(collectionName);
-            }
-        }
-
-        return new ArrayList<>(collections);
+        // 根据当前用户角色返回对应的 collection
+        UserRoleEnum role = UserContext.getCurrentUserRole();
+        String collection = (role == UserRoleEnum.ADMIN)
+                ? KnowledgeBaseConstant.SYSTEM_COLLECTION
+                : KnowledgeBaseConstant.USER_COLLECTION;
+        return List.of(collection);
     }
 
     /**

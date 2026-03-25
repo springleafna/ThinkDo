@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.springleaf.thinkdo.constant.KnowledgeBaseConstant;
 import com.springleaf.thinkdo.context.UserContext;
 import com.springleaf.thinkdo.domain.dto.VectorSpaceId;
 import com.springleaf.thinkdo.domain.dto.VectorSpaceSpec;
@@ -88,40 +89,22 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
             throw new BusinessException("知识库名称已存在：" + requestParam.getName());
         }
 
+        // 确定使用的固定 collection 名称
+        String collectionName = (scope == KnowledgeScopeEnum.SYSTEM)
+                ? KnowledgeBaseConstant.SYSTEM_COLLECTION
+                : KnowledgeBaseConstant.USER_COLLECTION;
+
         // 创建知识库
         KnowledgeBaseEntity kb = KnowledgeBaseEntity.builder()
                 .name(requestParam.getName())
                 .description(requestParam.getDescription())
                 .scope(scope)
                 .embeddingModel(requestParam.getEmbeddingModel())
-                .collectionName(requestParam.getCollectionName())
+                .collectionName(collectionName)
                 .createdBy(currentUserId)
                 .updatedBy(currentUserId)
                 .build();
         knowledgeBaseMapper.insert(kb);
-
-        // 创建存储桶
-        String bucketName = requestParam.getCollectionName();
-        try {
-            s3Client.createBucket(builder -> builder.bucket(bucketName));
-            log.info("成功创建RestFS存储桶，Bucket名称: {}", bucketName);
-        } catch (BucketAlreadyOwnedByYouException | BucketAlreadyExistsException e) {
-            if (e instanceof BucketAlreadyOwnedByYouException) {
-                log.error("RestFS存储桶已存在，Bucket名称: {}", bucketName, e);
-            } else {
-                log.error("RestFS存储桶已存在但由其他账户拥有，Bucket名称: {}", bucketName, e);
-            }
-            throw new BusinessException("存储桶名称已被占用：" + bucketName);
-        }
-
-        // 创建向量空间：确保向量空间存在，若不存在则创建
-        VectorSpaceSpec spaceSpec = VectorSpaceSpec.builder()
-                .spaceId(VectorSpaceId.builder()
-                        .logicalName(requestParam.getCollectionName())
-                        .build())
-                .remark(requestParam.getName())
-                .build();
-        vectorStoreService.ensureVectorSpace(spaceSpec);
 
         // 创建该用户知识库的意图节点
         String intentCode = "user_" + currentUserId + "_kb_" + kb.getId();
