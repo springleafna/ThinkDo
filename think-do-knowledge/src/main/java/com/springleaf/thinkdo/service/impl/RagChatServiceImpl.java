@@ -68,6 +68,8 @@ public class RagChatServiceImpl implements RagChatService {
         
         // RAG流程：根据检索到的知识构建系统提示词
         if (knowledgeBaseEnabled) {
+            // 确保用户意图树存在（domain和category级别节点）
+            intentResolver.ensureUserIntentTreeExists(userId);
             // 问题拆分
             RewriteResult rewriteResult = queryRewriteService.rewriteWithSplit(question, history);
             // 获取每个子问题及其意图结果

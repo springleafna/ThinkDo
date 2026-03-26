@@ -109,6 +109,7 @@ rag:
   search:
     channels:
       vector-global:
+        # 意图识别分数的最低阈值，如果全部低于该阈值则启用全局向量搜索
         confidence-threshold: 0.6
         top-k-multiplier: 3
       intent-directed:

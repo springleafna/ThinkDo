@@ -2,11 +2,17 @@ package com.springleaf.thinkdo.intent;
 
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.springleaf.thinkdo.domain.dto.IntentCandidate;
 import com.springleaf.thinkdo.domain.dto.IntentGroup;
 import com.springleaf.thinkdo.domain.dto.SubQuestionIntent;
+import com.springleaf.thinkdo.domain.entity.IntentNodeEntity;
 import com.springleaf.thinkdo.enums.IntentKind;
+import com.springleaf.thinkdo.enums.IntentLevel;
+import com.springleaf.thinkdo.enums.KnowledgeScopeEnum;
+import com.springleaf.thinkdo.mapper.IntentNodeMapper;
 import com.springleaf.thinkdo.rewrite.RewriteResult;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
@@ -20,17 +26,92 @@ import java.util.concurrent.Executor;
 import static com.springleaf.thinkdo.constant.RAGConstant.INTENT_MIN_SCORE;
 import static com.springleaf.thinkdo.constant.RAGConstant.MAX_INTENT_COUNT;
 
+@Slf4j
 @Service
 public class IntentResolver {
 
     private final IntentClassifier intentClassifier;
     private final Executor intentClassifyExecutor;
+    private final IntentNodeMapper intentNodeMapper;
 
     public IntentResolver(
             @Qualifier("defaultIntentClassifier") IntentClassifier intentClassifier,
-            @Qualifier("intentClassifyThreadPoolExecutor") Executor intentClassifyExecutor) {
+            @Qualifier("intentClassifyThreadPoolExecutor") Executor intentClassifyExecutor,
+            IntentNodeMapper intentNodeMapper) {
         this.intentClassifier = intentClassifier;
         this.intentClassifyExecutor = intentClassifyExecutor;
+        this.intentNodeMapper = intentNodeMapper;
+    }
+
+    /**
+     * 确保用户意图树存在（domain和category级别节点）
+     * 如果不存在则创建，存在则跳过
+     *
+     * @param userId 用户ID
+     */
+    public void ensureUserIntentTreeExists(Long userId) {
+        String domainCode = "root_user_" + userId;
+        String categoryCode = "category_user_kb_" + userId;
+
+        // 检查domain节点是否存在
+        IntentNodeEntity domainNode = intentNodeMapper.selectOne(
+                new LambdaQueryWrapper<IntentNodeEntity>()
+                        .eq(IntentNodeEntity::getIntentCode, domainCode)
+        );
+
+        // 如果domain节点不存在，则创建
+        if (domainNode == null) {
+            domainNode = IntentNodeEntity.builder()
+                    .kbId(null)
+                    .intentCode(domainCode)
+                    .scope(KnowledgeScopeEnum.USER.getValue())
+                    .name("用户私人知识库")
+                    .level(IntentLevel.DOMAIN.getCode())
+                    .parentCode(null)
+                    .description("用户私有知识库根节点，包含用户上传的所有文件内容")
+                    .examples("")
+                    .collectionName(null)
+                    .topK(null)
+                    .kind(IntentKind.KB.getCode())
+                    .promptSnippet("请基于用户私有知识库内容回答，这些是用户自己上传的文件。")
+                    .sortOrder(1)
+                    .enabled(1)
+                    .createdBy(userId)
+                    .updatedBy(userId)
+                    .build();
+            intentNodeMapper.insert(domainNode);
+            log.info("为用户 {} 创建domain意图节点: {}", userId, domainCode);
+        }
+
+        // 检查category节点是否存在
+        IntentNodeEntity categoryNode = intentNodeMapper.selectOne(
+                new LambdaQueryWrapper<IntentNodeEntity>()
+                        .eq(IntentNodeEntity::getIntentCode, categoryCode)
+        );
+
+        // 如果category节点不存在，则创建
+        if (categoryNode == null) {
+            categoryNode = IntentNodeEntity.builder()
+                    .kbId(null)
+                    .intentCode(categoryCode)
+                    .scope(KnowledgeScopeEnum.USER.getValue())
+                    .name("我的知识库")
+                    .level(IntentLevel.CATEGORY.getCode())
+                    .parentCode(domainCode)
+                    .description("用户创建的私有知识库集合，包含用户上传的所有文件")
+                    .examples("")
+                    .collectionName(null)
+                    .topK(null)
+                    .kind(IntentKind.KB.getCode())
+                    .promptSnippet("请基于用户知识库中的私有内容回答问题。")
+                    .sortOrder(1)
+                    .enabled(1)
+                    .createdBy(userId)
+                    .updatedBy(userId)
+                    .build();
+            intentNodeMapper.insert(categoryNode);
+            log.info("为用户 {} 创建category意图节点: {}", userId, categoryCode);
+        }
     }
 
     /**

@@ -292,12 +292,12 @@ VALUES (
 INSERT INTO tb_intent_node (kb_id, intent_code, name, scope, level, parent_code, description, examples, collection_name, top_k, kind, prompt_snippet, sort_order, enabled, created_by, deleted)
 VALUES (
            NULL,
-           'root_user_3',
-           '我的知识',
+           'root_user_{userId}',
+           '用户私人知识库',
            'USER',
            0,
            NULL,
-           '用户私有知识库根节点，包含用户上传的所有文档、笔记、项目资料等私有内容',
+           '用户私有知识库根节点，包含用户上传的所有文件内容',
            '',
            NULL,
            NULL,
@@ -305,7 +305,7 @@ VALUES (
            '请基于用户私有知识库内容回答，这些是用户自己上传的文件。',
            1,
            1,
-           3,
+           {userId},
            0
        );
 
@@ -317,12 +317,12 @@ VALUES (
 INSERT INTO tb_intent_node (kb_id, intent_code, name, scope, level, parent_code, description, examples, collection_name, top_k, kind, prompt_snippet, sort_order, enabled, created_by, deleted)
 VALUES (
            NULL,
-           'category_user_kb_3',
+           'category_user_kb_{userId}',
            '我的知识库',
            'USER',
            1,
-           'root_user_3',
-           '用户创建的私有知识库集合，包含用户个人文档、学习笔记、项目资料等',
+           'root_user_{userId}',
+           '用户创建的私有知识库集合，包含用户上传的所有文件',
            '',
            NULL,
            NULL,
@@ -330,7 +330,7 @@ VALUES (
            '请基于用户知识库中的私有内容回答问题。',
            1,
            1,
-           3,
+           {userId},
            0
        );
 
@@ -349,11 +349,11 @@ VALUES (
 INSERT INTO tb_intent_node (kb_id, intent_code, name, scope, level, parent_code, description, examples, collection_name, top_k, kind, prompt_snippet, sort_order, enabled, created_by, deleted)
 VALUES (
            {kb_id},
-           'user_kb_3_{kb_id}',
+           'user_kb_{userId}_{kb_id}',
            '{kb_name}',
            'USER',
            2,
-           'category_user_kb_3',
+           'category_user_kb_{userId}',
            '{kb_description}',
            '我的{kb_name}|我的笔记关于{kb_name}|我上传的{kb_name}',
            '{collection_name}',
@@ -362,7 +362,7 @@ VALUES (
            '请基于用户知识库"{kb_name}"中的私有内容回答，这些是用户上传的个人文档。',
            1,
            1,
-           3,
+           {userId},
            0
        );
 

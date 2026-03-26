@@ -30,7 +30,7 @@ public class IntentTreeTest {
     private QueryRewriteService queryRewriteService;
 
     // 预设测试参数
-    private static final Long TEST_USER_ID = 10001L;
+    private static final Long TEST_USER_ID = 5L;
     private static final String TEST_QUESTION = "该平台中主要具备哪些功能？请简单解释一下，并告知我该系统的架构设计?已经我的笔记大概有哪些内容，帮我查一下谢谢";
 
     @Test

@@ -8,8 +8,6 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.springleaf.thinkdo.constant.KnowledgeBaseConstant;
 import com.springleaf.thinkdo.context.UserContext;
-import com.springleaf.thinkdo.domain.dto.VectorSpaceId;
-import com.springleaf.thinkdo.domain.dto.VectorSpaceSpec;
 import com.springleaf.thinkdo.domain.entity.IntentNodeEntity;
 import com.springleaf.thinkdo.domain.entity.KnowledgeBaseEntity;
 import com.springleaf.thinkdo.domain.entity.KnowledgeDocumentEntity;
@@ -25,18 +23,14 @@ import com.springleaf.thinkdo.exception.BusinessException;
 import com.springleaf.thinkdo.mapper.IntentNodeMapper;
 import com.springleaf.thinkdo.mapper.KnowledgeBaseMapper;
 import com.springleaf.thinkdo.mapper.KnowledgeDocumentMapper;
-import com.springleaf.thinkdo.service.IntentNodeService;
+import com.springleaf.thinkdo.intent.IntentResolver;
 import com.springleaf.thinkdo.service.KnowledgeBaseService;
-import com.springleaf.thinkdo.service.VectorStoreService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
-import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.BucketAlreadyExistsException;
-import software.amazon.awssdk.services.s3.model.BucketAlreadyOwnedByYouException;
 
 import java.util.HashMap;
 import java.util.List;
@@ -57,9 +51,8 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
 
     private final KnowledgeBaseMapper knowledgeBaseMapper;
     private final KnowledgeDocumentMapper knowledgeDocumentMapper;
-    private final S3Client s3Client;
-    private final VectorStoreService vectorStoreService;
     private final IntentNodeMapper intentNodeMapper;
+    private final IntentResolver intentResolver;
 
     @Transactional
     @Override
@@ -106,6 +99,8 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
                 .build();
         knowledgeBaseMapper.insert(kb);
 
+        // 确保用户意图树存在（domain和category级别节点）
+        intentResolver.ensureUserIntentTreeExists(currentUserId);
         // 创建该用户知识库的意图节点
         String intentCode = "user_" + currentUserId + "_kb_" + kb.getId();
         IntentNodeEntity intentNode = IntentNodeEntity.builder()
