@@ -70,7 +70,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserEntity> impleme
     }
 
     @Override
-    public String login(UserLoginReq loginReq) {
+    public String login(UserLoginReq loginReq, UserRoleEnum requiredRole) {
         String username = loginReq.getUsername();
         UserEntity user = userMapper.selectOne(
                 new LambdaQueryWrapper<UserEntity>().eq(UserEntity::getUsername, username)
@@ -81,6 +81,23 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserEntity> impleme
             throw new BusinessException("用户名或密码错误");
         }
 
+        // 校验角色
+        RoleEntity role = roleMapper.selectOne(
+                new LambdaQueryWrapper<RoleEntity>().eq(RoleEntity::getName, requiredRole.getValue())
+        );
+        if (role == null) {
+            throw new BusinessException("系统角色不存在，请联系管理员");
+        }
+
+        UserRoleEntity userRole = userRoleMapper.selectOne(
+                new LambdaQueryWrapper<UserRoleEntity>()
+                        .eq(UserRoleEntity::getUserId, user.getId())
+                        .eq(UserRoleEntity::getRoleId, role.getId())
+        );
+        if (userRole == null) {
+            throw new BusinessException("该账号没有" + requiredRole.getDescription() + "权限");
+        }
+
         // 执行登录
         StpUtil.login(user.getId());
 
@@ -88,7 +105,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserEntity> impleme
         StpUtil.getSession().set("username", user.getUsername());
         StpUtil.getSession().set("userId", user.getId());
 
-        log.info("用户登录成功, username={}", username);
+        log.info("用户登录成功, username={}, role={}", username, requiredRole.getValue());
 
         return StpUtil.getTokenValue();
     }

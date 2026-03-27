@@ -115,6 +115,11 @@ rag:
       intent-directed:
         min-intent-score: 0.4
         top-k-multiplier: 2
+
+  mcp:
+    servers:
+      - name: default
+        url: http://localhost:9099
 # Sa-Token配置
 sa-token:
   # token名称 (同时也是cookie名称)

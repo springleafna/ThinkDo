@@ -5,6 +5,7 @@ import com.springleaf.thinkdo.domain.request.UserLoginReq;
 import com.springleaf.thinkdo.domain.request.UserRegisterReq;
 import com.springleaf.thinkdo.domain.request.UserUpdatePasswordReq;
 import com.springleaf.thinkdo.domain.response.UserInfoResp;
+import com.springleaf.thinkdo.enums.UserRoleEnum;
 import com.springleaf.thinkdo.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -27,11 +28,20 @@ public class UserController {
     }
 
     /**
-     * 用户名+密码 登录
+     * 普通用户登录
      */
     @PostMapping("/login")
     public Result<String> login(@RequestBody @Valid UserLoginReq loginReq) {
-        String token = userService.login(loginReq);
+        String token = userService.login(loginReq, UserRoleEnum.USER);
+        return Result.success(token);
+    }
+
+    /**
+     * 管理员登录
+     */
+    @PostMapping("/admin/login")
+    public Result<String> adminLogin(@RequestBody @Valid UserLoginReq loginReq) {
+        String token = userService.login(loginReq, UserRoleEnum.ADMIN);
         return Result.success(token);
     }
 

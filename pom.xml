@@ -35,6 +35,7 @@
         <module>think-do-plan</module>
         <!-- 启动器模块：SpringBoot启动类 -->
         <module>think-do-start</module>
+        <module>think-do-mcp</module>
     </modules>
 
     <properties>
