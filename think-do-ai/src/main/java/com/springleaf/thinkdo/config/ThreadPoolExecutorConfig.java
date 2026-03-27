@@ -133,4 +133,23 @@ public class ThreadPoolExecutorConfig {
         return TtlExecutors.getTtlExecutor(executor);
     }
 
+    /**
+     * MCP批处理线程池
+     */
+    @Bean
+    public Executor mcpBatchThreadPoolExecutor() {
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(
+                CPU_COUNT,
+                CPU_COUNT << 1,
+                60,
+                TimeUnit.SECONDS,
+                new SynchronousQueue<>(),
+                ThreadFactoryBuilder.create()
+                        .setNamePrefix("mcp_batch_executor_")
+                        .build(),
+                new ThreadPoolExecutor.CallerRunsPolicy()
+        );
+        return TtlExecutors.getTtlExecutor(executor);
+    }
+
 }

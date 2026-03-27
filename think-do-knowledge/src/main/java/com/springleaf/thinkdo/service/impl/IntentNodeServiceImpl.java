@@ -6,6 +6,7 @@ import com.google.gson.Gson;
 import com.springleaf.thinkdo.domain.entity.IntentNodeEntity;
 import com.springleaf.thinkdo.domain.request.IntentNodeCreateReq;
 import com.springleaf.thinkdo.domain.response.IntentNodeTreeResp;
+import com.springleaf.thinkdo.enums.IntentKind;
 import com.springleaf.thinkdo.enums.IntentLevel;
 import com.springleaf.thinkdo.exception.BusinessException;
 import com.springleaf.thinkdo.mapper.IntentNodeMapper;
@@ -63,6 +64,11 @@ public class IntentNodeServiceImpl implements IntentNodeService {
                 throw new BusinessException(
                         IntentLevel.fromCode(level) + " 节点的父节点必须是 " + IntentLevel.fromCode(expectedParentLevel));
             }
+        }
+
+        if (requestParam.getKind() == IntentKind.MCP.getCode()
+                && (requestParam.getMcpToolId() == null || requestParam.getMcpToolId().isEmpty())) {
+            throw new BusinessException("MCP 类型节点必须填写 mcpToolId");
         }
 
         IntentNodeEntity entity = IntentNodeEntity.builder()

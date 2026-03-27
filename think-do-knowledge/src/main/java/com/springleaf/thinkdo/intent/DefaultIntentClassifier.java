@@ -12,6 +12,7 @@ import com.springleaf.thinkdo.chat.ChatMessage;
 import com.springleaf.thinkdo.chat.ChatRequest;
 import com.springleaf.thinkdo.chat.LLMService;
 import com.springleaf.thinkdo.domain.entity.IntentNodeEntity;
+import com.springleaf.thinkdo.enums.IntentKind;
 import com.springleaf.thinkdo.enums.KnowledgeScopeEnum;
 import com.springleaf.thinkdo.mapper.IntentNodeMapper;
 import com.springleaf.thinkdo.prompt.PromptTemplateLoader;
@@ -263,15 +264,20 @@ public class DefaultIntentClassifier implements IntentClassifier, IntentNodeRegi
      * todo: 需修改为私有，目前时为了测试
      */
     public List<IntentNode> loadIntentTreeFromDB(Long userId) {
-        // 1. 获取系统知识库意图节点+用户知识库意图节点
-        // 查询条件：deleted=0 AND (scope='SYSTEM' OR (scope='USER' AND created_by=userId))
+        // 1. 获取所有意图节点（非KB节点不限scope，KB节点按scope过滤）
+        // 查询条件：deleted=0 AND (kind!=0 OR (kind=0 AND (scope='SYSTEM' OR (scope='USER' AND created_by=userId))))
         List<IntentNodeEntity> intentNodeList = intentNodeMapper.selectList(
                 Wrappers.<IntentNodeEntity>lambdaQuery()
                         .eq(IntentNodeEntity::getDeleted, 0)
                         .and(wrapper -> wrapper
-                                .eq(IntentNodeEntity::getScope, KnowledgeScopeEnum.SYSTEM.getValue())
-                                .or(w -> w.eq(IntentNodeEntity::getScope, KnowledgeScopeEnum.USER.getValue())
-                                        .eq(IntentNodeEntity::getCreatedBy, userId))
+                                .ne(IntentNodeEntity::getKind, IntentKind.KB.getCode())
+                                .or(w -> w.eq(IntentNodeEntity::getKind, IntentKind.KB.getCode())
+                                        .and(w2 -> w2
+                                                .eq(IntentNodeEntity::getScope, KnowledgeScopeEnum.SYSTEM.getValue())
+                                                .or(w3 -> w3.eq(IntentNodeEntity::getScope, KnowledgeScopeEnum.USER.getValue())
+                                                        .eq(IntentNodeEntity::getCreatedBy, userId))
+                                        )
+                                )
                         )
         );
 

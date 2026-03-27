@@ -3,7 +3,9 @@ package com.springleaf.thinkdo.retrieve.prompt;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
 import com.springleaf.thinkdo.domain.dto.RetrievedChunk;
+import com.springleaf.thinkdo.intent.IntentNode;
 import com.springleaf.thinkdo.intent.NodeScore;
+import com.springleaf.thinkdo.mcp.MCPResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -123,7 +125,86 @@ public class DefaultContextFormatter implements ContextFormatter {
     }
 
     @Override
-    public String formatMcpContext(List<NodeScore> mcpIntents) {
-        return "";
+    public String formatMcpContext(List<MCPResponse> responses, List<NodeScore> mcpIntents) {
+        if (CollUtil.isEmpty(responses) || responses.stream().noneMatch(MCPResponse::isSuccess)) {
+            return "";
+        }
+        if (CollUtil.isEmpty(mcpIntents)) {
+            return mergeResponsesToText(responses);
+        }
+
+        Map<String, IntentNode> toolToIntent = new LinkedHashMap<>();
+        for (NodeScore ns : mcpIntents) {
+            IntentNode node = ns.getNode();
+            if (node == null || StrUtil.isBlank(node.getMcpToolId())) {
+                continue;
+            }
+            toolToIntent.putIfAbsent(node.getMcpToolId(), node);
+        }
+
+        Map<String, List<MCPResponse>> grouped = responses.stream()
+                .filter(MCPResponse::isSuccess)
+                .filter(r -> StrUtil.isNotBlank(r.getToolId()))
+                .collect(Collectors.groupingBy(MCPResponse::getToolId));
+
+        return toolToIntent.entrySet().stream()
+                .map(entry -> {
+                    List<MCPResponse> toolResponses = grouped.get(entry.getKey());
+                    if (CollUtil.isEmpty(toolResponses)) {
+                        return "";
+                    }
+                    IntentNode node = entry.getValue();
+                    String snippet = StrUtil.emptyIfNull(node.getPromptSnippet()).trim();
+                    String body = mergeResponsesToText(toolResponses);
+                    if (StrUtil.isBlank(body)) {
+                        return "";
+                    }
+                    StringBuilder block = new StringBuilder();
+                    if (StrUtil.isNotBlank(snippet)) {
+                        block.append("#### 意图规则\n").append(snippet).append("\n");
+                    }
+                    block.append("#### 动态数据片段\n").append(body);
+                    return block.toString();
+                })
+                .filter(StrUtil::isNotBlank)
+                .collect(Collectors.joining("\n\n"));
+    }
+
+    /**
+     * 将多个 MCP 响应合并为文本（用于拼接到 Prompt）
+     */
+    private String mergeResponsesToText(List<MCPResponse> responses) {
+        if (responses == null || responses.isEmpty()) {
+            return "";
+        }
+
+        List<String> successResults = new ArrayList<>();
+        List<String> errorResults = new ArrayList<>();
+
+        for (MCPResponse response : responses) {
+            if (response.isSuccess() && response.getTextResult() != null) {
+                successResults.add(response.getTextResult());
+            } else if (!response.isSuccess()) {
+                errorResults.add(String.format("工具 %s 调用失败: %s",
+                        response.getToolId(), response.getErrorMessage()));
+            }
+        }
+
+        StringBuilder sb = new StringBuilder();
+
+        if (!successResults.isEmpty()) {
+            for (String result : successResults) {
+                sb.append(result).append("\n\n");
+            }
+        }
+
+        if (!errorResults.isEmpty()) {
+            sb.append("【部分查询失败】\n");
+            for (String error : errorResults) {
+                sb.append("- ").append(error).append("\n");
+            }
+        }
+
+        return sb.toString().trim();
     }
 }

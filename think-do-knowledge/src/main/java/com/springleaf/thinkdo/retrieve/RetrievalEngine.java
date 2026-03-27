@@ -9,6 +9,7 @@ import com.springleaf.thinkdo.domain.dto.SubQuestionIntent;
 import com.springleaf.thinkdo.enums.IntentKind;
 import com.springleaf.thinkdo.intent.IntentNode;
 import com.springleaf.thinkdo.intent.NodeScore;
+import com.springleaf.thinkdo.mcp.*;
 import com.springleaf.thinkdo.retrieve.prompt.ContextFormatter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -32,14 +33,23 @@ public class RetrievalEngine {
     private final ContextFormatter contextFormatter;
     private final MultiChannelRetrievalEngine multiChannelRetrievalEngine;
     private final Executor ragContextExecutor;
+    private final MCPParameterExtractor mcpParameterExtractor;
+    private final MCPToolRegistry mcpToolRegistry;
+    private final Executor mcpBatchExecutor;
 
     public RetrievalEngine(
             ContextFormatter contextFormatter,
             MultiChannelRetrievalEngine multiChannelRetrievalEngine,
-            @Qualifier("ragContextThreadPoolExecutor") Executor ragContextExecutor) {
+            MCPParameterExtractor mcpParameterExtractor,
+            MCPToolRegistry mcpToolRegistry,
+            @Qualifier("ragContextThreadPoolExecutor") Executor ragContextExecutor,
+            @Qualifier("mcpBatchThreadPoolExecutor") Executor mcpBatchExecutor) {
         this.contextFormatter = contextFormatter;
         this.multiChannelRetrievalEngine = multiChannelRetrievalEngine;
+        this.mcpParameterExtractor = mcpParameterExtractor;
+        this.mcpToolRegistry = mcpToolRegistry;
         this.ragContextExecutor = ragContextExecutor;
+        this.mcpBatchExecutor = mcpBatchExecutor;
     }
 
     /**
@@ -101,10 +111,81 @@ public class RetrievalEngine {
 
         KbResult kbResult = retrieveAndRerank(intent, kbIntents, topK);
 
-        // TODO: MCP相关
-        String mcpContext = "";
+        String mcpContext = CollUtil.isNotEmpty(mcpIntents)
+                ? executeMcpAndMerge(intent.subQuestion(), mcpIntents)
+                : "";
 
         return new SubQuestionContext(intent.subQuestion(), kbResult.groupedContext(), mcpContext, kbResult.intentChunks());
+    }
+
+    private String executeMcpAndMerge(String question, List<NodeScore> mcpIntents) {
+        if (CollUtil.isEmpty(mcpIntents)) {
+            return "";
+        }
+
+        List<MCPResponse> responses = executeMcpTools(question, mcpIntents);
+        if (responses.isEmpty() || responses.stream().noneMatch(MCPResponse::isSuccess)) {
+            return "";
+        }
+
+        return contextFormatter.formatMcpContext(responses, mcpIntents);
+    }
+
+    private List<MCPResponse> executeMcpTools(String question, List<NodeScore> mcpIntentScores) {
+        List<MCPRequest> requests = mcpIntentScores.stream()
+                .map(ns -> buildMcpRequest(question, ns.getNode()))
+                .filter(Objects::nonNull)
+                .toList();
+
+        if (requests.isEmpty()) {
+            return List.of();
+        }
+
+        // 并行执行所有 MCP 工具调用
+        List<CompletableFuture<MCPResponse>> futures = requests.stream()
+                .map(request -> CompletableFuture.supplyAsync(() -> executeSingleMcpTool(request), mcpBatchExecutor))
+                .toList();
+
+        return futures.stream()
+                .map(CompletableFuture::join)
+                .toList();
+    }
+
+    private MCPResponse executeSingleMcpTool(MCPRequest request) {
+        String toolId = request.getToolId();
+        Optional<MCPToolExecutor> executorOpt = mcpToolRegistry.getExecutor(toolId);
+        if (executorOpt.isEmpty()) {
+            log.warn("MCP 工具执行失败, 工具不存在: {}", toolId);
+            return MCPResponse.error(toolId, "TOOL_NOT_FOUND", "工具不存在: " + toolId);
+        }
+
+        try {
+            return executorOpt.get().execute(request);
+        } catch (Exception e) {
+            log.error("MCP 工具执行异常, toolId: {}", toolId, e);
+            return MCPResponse.error(toolId, "EXECUTION_ERROR", "工具调用异常: " + e.getMessage());
+        }
+    }
+
+    private MCPRequest buildMcpRequest(String question, IntentNode intentNode) {
+        String toolId = intentNode.getMcpToolId();
+        Optional<MCPToolExecutor> executorOpt = mcpToolRegistry.getExecutor(toolId);
+        if (executorOpt.isEmpty()) {
+            log.warn("MCP 工具不存在: {}", toolId);
+            return null;
+        }
+
+        MCPTool tool = executorOpt.get().getToolDefinition();
+        log.info("问题：{} 获取到的工具Id为：{}", question, tool.getToolId());
+
+        String customParamPrompt = intentNode.getParamPromptTemplate();
+        Map<String, Object> params = mcpParameterExtractor.extractParameters(question, tool, customParamPrompt);
+
+        return MCPRequest.builder()
+                .toolId(toolId)
+                .userQuestion(question)
+                .parameters(params != null ? params : new HashMap<>())
+                .build();
     }
 
     /**
