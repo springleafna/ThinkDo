@@ -75,7 +75,7 @@ public class RagChatServiceImpl implements RagChatService {
             // 获取每个子问题及其意图结果
             List<SubQuestionIntent> subIntents = intentResolver.resolve(rewriteResult, userId);
             // 根据意图节点进行向量化检索
-            RetrievalContext ctx = retrievalEngine.retrieve(subIntents, DEFAULT_TOP_K);
+            RetrievalContext ctx = retrievalEngine.retrieve(subIntents, DEFAULT_TOP_K, userId);
             if (ctx.isEmpty()) {
                 String emptyReply = "未检索到与问题相关的文档内容。";
                 callback.onContent(emptyReply);

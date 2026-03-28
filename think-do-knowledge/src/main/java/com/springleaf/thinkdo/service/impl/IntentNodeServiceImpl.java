@@ -67,8 +67,9 @@ public class IntentNodeServiceImpl implements IntentNodeService {
         }
 
         if (requestParam.getKind() == IntentKind.MCP.getCode()
+                && requestParam.getLevel() == IntentLevel.TOPIC.getCode()
                 && (requestParam.getMcpToolId() == null || requestParam.getMcpToolId().isEmpty())) {
-            throw new BusinessException("MCP 类型节点必须填写 mcpToolId");
+            throw new BusinessException("MCP 类型且 TOPIC 层级的节点必须填写 mcpToolId");
         }
 
         IntentNodeEntity entity = IntentNodeEntity.builder()

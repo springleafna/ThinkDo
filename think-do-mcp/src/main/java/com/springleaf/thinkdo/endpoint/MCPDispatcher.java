@@ -100,7 +100,13 @@ public class MCPDispatcher {
             List<Map<String, Object>> content = new ArrayList<>();
             Map<String, Object> textContent = new LinkedHashMap<>();
             textContent.put("type", "text");
-            textContent.put("text", toolResponse.getTextResult() != null ? toolResponse.getTextResult() : "");
+            String text;
+            if (toolResponse.isSuccess()) {
+                text = toolResponse.getTextResult() != null ? toolResponse.getTextResult() : "";
+            } else {
+                text = toolResponse.getErrorMessage() != null ? toolResponse.getErrorMessage() : "";
+            }
+            textContent.put("text", text);
             content.add(textContent);
 
             Map<String, Object> result = new LinkedHashMap<>();

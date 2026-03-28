@@ -24,7 +24,7 @@ import static com.springleaf.thinkdo.constant.RAGConstant.*;
 
 /**
  * 检索引擎
- * 负责协调多通道检索（知识库）和 MCP（模型控制协议）工具的调用，并对检索结果进行重排序和格式化，最终生成用于 LLM 的上下文
+ * 负责协调多通道检索（知识库）和 MCP（模型控制协议)工具的调用，并对检索结果进行重排序和格式化,最终生成用于 LLM 的上下文
  */
 @Slf4j
 @Service
@@ -55,11 +55,12 @@ public class RetrievalEngine {
     /**
      * 检索方法：根据子问题意图列表执行检索，整合知识库和MCP工具的结果
      *
-     * @param subIntents 子问题意图列表，包含每个子问题及其相关的意图节点和评分
+     * @param subIntents 子问题意图列表,包含每个子问题及其相关的意图节点和评分
      * @param topK       需要返回的最相关结果数量，若 ≤0 则使用默认值
-     * @return RetrievalContext 检索上下文，包含知识库上下文、MCP上下文和分组的检索块
+     * @param userId   当前登录用户ID，用于MCP工具注入
+     * @return RetrievalContext 检索上下文,包含知识库上下文、MCP上下文和分组的检索块
      */
-    public RetrievalContext retrieve(List<SubQuestionIntent> subIntents, int topK) {
+    public RetrievalContext retrieve(List<SubQuestionIntent> subIntents, int topK, Long userId) {
         if (CollUtil.isEmpty(subIntents)) {
             return RetrievalContext.builder()
                     .mcpContext("")
@@ -71,10 +72,7 @@ public class RetrievalEngine {
         int finalTopK = topK > 0 ? topK : DEFAULT_TOP_K;
         List<CompletableFuture<SubQuestionContext>> tasks = subIntents.stream()
                 .map(si -> CompletableFuture.supplyAsync(
-                        () -> buildSubQuestionContext(
-                                si,
-                                resolveSubQuestionTopK(si, finalTopK)
-                        ),
+                        () -> buildSubQuestionContext(si, userId, resolveSubQuestionTopK(si, finalTopK)),
                         ragContextExecutor
                 ))
                 .toList();
@@ -105,47 +103,42 @@ public class RetrievalEngine {
                 .build();
     }
 
-    private SubQuestionContext buildSubQuestionContext(SubQuestionIntent intent, int topK) {
+    private SubQuestionContext buildSubQuestionContext(SubQuestionIntent intent, Long userId, int topK) {
         List<NodeScore> kbIntents = filterKbIntents(intent.nodeScores());
         List<NodeScore> mcpIntents = filterMCPIntents(intent.nodeScores());
 
         KbResult kbResult = retrieveAndRerank(intent, kbIntents, topK);
 
         String mcpContext = CollUtil.isNotEmpty(mcpIntents)
-                ? executeMcpAndMerge(intent.subQuestion(), mcpIntents)
+                ? executeMcpAndMerge(intent.subQuestion(), mcpIntents, userId)
                 : "";
 
         return new SubQuestionContext(intent.subQuestion(), kbResult.groupedContext(), mcpContext, kbResult.intentChunks());
     }
 
-    private String executeMcpAndMerge(String question, List<NodeScore> mcpIntents) {
+    private String executeMcpAndMerge(String question, List<NodeScore> mcpIntents, Long userId) {
         if (CollUtil.isEmpty(mcpIntents)) {
             return "";
         }
-
-        List<MCPResponse> responses = executeMcpTools(question, mcpIntents);
+        List<MCPResponse> responses = executeMcpTools(question, mcpIntents, userId);
         if (responses.isEmpty() || responses.stream().noneMatch(MCPResponse::isSuccess)) {
             return "";
         }
-
         return contextFormatter.formatMcpContext(responses, mcpIntents);
     }
 
-    private List<MCPResponse> executeMcpTools(String question, List<NodeScore> mcpIntentScores) {
+    private List<MCPResponse> executeMcpTools(String question, List<NodeScore> mcpIntentScores, Long userId) {
         List<MCPRequest> requests = mcpIntentScores.stream()
-                .map(ns -> buildMcpRequest(question, ns.getNode()))
+                .map(ns -> buildMcpRequest(question, ns.getNode(), userId))
                 .filter(Objects::nonNull)
                 .toList();
 
         if (requests.isEmpty()) {
             return List.of();
         }
-
-        // 并行执行所有 MCP 工具调用
         List<CompletableFuture<MCPResponse>> futures = requests.stream()
                 .map(request -> CompletableFuture.supplyAsync(() -> executeSingleMcpTool(request), mcpBatchExecutor))
                 .toList();
-
         return futures.stream()
                 .map(CompletableFuture::join)
                 .toList();
@@ -158,7 +151,6 @@ public class RetrievalEngine {
             log.warn("MCP 工具执行失败, 工具不存在: {}", toolId);
             return MCPResponse.error(toolId, "TOOL_NOT_FOUND", "工具不存在: " + toolId);
         }
-
         try {
             return executorOpt.get().execute(request);
         } catch (Exception e) {
@@ -167,7 +159,7 @@ public class RetrievalEngine {
         }
     }
 
-    private MCPRequest buildMcpRequest(String question, IntentNode intentNode) {
+    private MCPRequest buildMcpRequest(String question, IntentNode intentNode, Long userId) {
         String toolId = intentNode.getMcpToolId();
         Optional<MCPToolExecutor> executorOpt = mcpToolRegistry.getExecutor(toolId);
         if (executorOpt.isEmpty()) {
@@ -180,19 +172,22 @@ public class RetrievalEngine {
 
         String customParamPrompt = intentNode.getParamPromptTemplate();
         Map<String, Object> params = mcpParameterExtractor.extractParameters(question, tool, customParamPrompt);
+        if (params == null) {
+            params = new HashMap<>();
+        }
+        // 工具定义标记了 requireUserId 时，自动注入当前用户 ID
+        // LLM 无法推断用户 ID，必须由调用方传入
+        if (tool.isRequireUserId() && userId != null) {
+            params.put("userId", String.valueOf(userId));
+        }
 
         return MCPRequest.builder()
                 .toolId(toolId)
                 .userQuestion(question)
-                .parameters(params != null ? params : new HashMap<>())
+                .parameters(params)
                 .build();
     }
 
-    /**
-     * 子问题实际 TopK 计算规则：
-     * 1. 命中 KB 意图节点且配置了节点级 topK：取最大值（多意图保守放大）
-     * 2. 没有任何可用节点级 topK：回退到全局 topK
-     */
     private int resolveSubQuestionTopK(SubQuestionIntent intent, int fallbackTopK) {
         return filterKbIntents(intent.nodeScores()).stream()
                 .map(NodeScore::getNode)
@@ -233,33 +228,24 @@ public class RetrievalEngine {
     }
 
     private KbResult retrieveAndRerank(SubQuestionIntent intent, List<NodeScore> kbIntents, int topK) {
-        // 使用多通道检索引擎（是否启用全局检索由置信度阈值决定）
         List<SubQuestionIntent> subIntents = List.of(intent);
         List<RetrievedChunk> chunks = multiChannelRetrievalEngine.retrieveKnowledgeChannels(subIntents, topK);
 
         if (CollUtil.isEmpty(chunks)) {
             return KbResult.empty();
         }
-
-        // 按意图节点分组（用于格式化上下文）
         Map<String, List<RetrievedChunk>> intentChunks = new ConcurrentHashMap<>();
-
-        // 如果有意图识别结果，按意图节点 ID 分组
         if (CollUtil.isNotEmpty(kbIntents)) {
-            // 将所有 chunks 按意图节点 ID 分配
-            // 注意：多通道检索返回的 chunks 无法精确对应到某个意图节点
-            // 所以我们将所有 chunks 分配给每个意图节点
             for (NodeScore ns : kbIntents) {
                 intentChunks.put(ns.getNode().getId(), chunks);
             }
         } else {
-            // 如果没有意图识别结果，使用特殊 key
             intentChunks.put(MULTI_CHANNEL_KEY, chunks);
         }
-
         String groupedContext = contextFormatter.formatKbContext(kbIntents, intentChunks, topK);
         return new KbResult(groupedContext, intentChunks);
     }
+
     private record SubQuestionContext(String question,
                                       String kbContext,
                                       String mcpContext,
