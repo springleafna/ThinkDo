@@ -57,8 +57,8 @@ ai:
     message-chunk-size: 1
 
   chat:
-    default-model: qwen3-max
-    deep-thinking-model: qwen3-max
+    default-model: glm-4.7
+    deep-thinking-model: glm-4.7
     candidates:
       - id: qwen-plus
         provider: bailian
