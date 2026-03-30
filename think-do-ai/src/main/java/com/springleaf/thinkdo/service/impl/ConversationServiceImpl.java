@@ -128,8 +128,13 @@ public class ConversationServiceImpl extends ServiceImpl<ConversationMapper, Con
             summaryWrapper.in(ConversationSummaryEntity::getConversationId, conversationIds)
                     .select(ConversationSummaryEntity::getConversationId, ConversationSummaryEntity::getContent);
             List<ConversationSummaryEntity> summaries = conversationSummaryMapper.selectList(summaryWrapper);
+            // 处理可能存在的重复 conversationId，保留最后一条记录
             summaryMap = summaries.stream()
-                    .collect(Collectors.toMap(ConversationSummaryEntity::getConversationId, ConversationSummaryEntity::getContent));
+                    .collect(Collectors.toMap(
+                            ConversationSummaryEntity::getConversationId,
+                            ConversationSummaryEntity::getContent,
+                            (existing, replacement) -> replacement
+                    ));
         }
 
         Map<String, String> finalSummaryMap = summaryMap;

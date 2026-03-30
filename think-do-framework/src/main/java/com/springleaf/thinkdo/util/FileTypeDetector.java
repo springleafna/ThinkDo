@@ -3,10 +3,6 @@ package com.springleaf.thinkdo.util;
 import java.util.Locale;
 import java.util.Map;
 
-/**
- * 文件类型探测器工具类
- * 用于根据文件名或 MIME 类型识别文件类型
- */
 public final class FileTypeDetector {
 
     private static final Map<String, String> EXTENSION_MAP = Map.ofEntries(
@@ -40,32 +36,24 @@ public final class FileTypeDetector {
         if (typeByExtension != null) {
             return typeByExtension;
         }
-
         String typeByMime = mapMimeType(mimeType);
         if (typeByMime != null) {
             return typeByMime;
         }
-
         if (!extension.isBlank()) {
             return extension;
         }
-
         return mimeType == null ? "" : mimeType;
     }
 
     private static String mapExtension(String extension) {
-        if (extension == null || extension.isBlank()) {
-            return null;
-        }
+        if (extension == null || extension.isBlank()) return null;
         return EXTENSION_MAP.get(extension);
     }
 
     private static String mapMimeType(String mimeType) {
-        if (mimeType == null || mimeType.isBlank()) {
-            return null;
-        }
-        String normalized = normalizeMimeType(mimeType);
-        return MIME_MAP.get(normalized);
+        if (mimeType == null || mimeType.isBlank()) return null;
+        return MIME_MAP.get(normalizeMimeType(mimeType));
     }
 
     private static String normalizeMimeType(String mimeType) {
@@ -75,18 +63,14 @@ public final class FileTypeDetector {
     }
 
     private static String extractExtension(String fileName) {
-        if (fileName == null) {
-            return "";
-        }
+        if (fileName == null) return "";
         String name = fileName.trim();
         int slashIndex = Math.max(name.lastIndexOf('/'), name.lastIndexOf('\\'));
         if (slashIndex >= 0 && slashIndex + 1 < name.length()) {
             name = name.substring(slashIndex + 1);
         }
         int dotIndex = name.lastIndexOf('.');
-        if (dotIndex < 0 || dotIndex == name.length() - 1) {
-            return "";
-        }
+        if (dotIndex < 0 || dotIndex == name.length() - 1) return "";
         return name.substring(dotIndex + 1).trim().toLowerCase(Locale.ROOT);
     }
 }

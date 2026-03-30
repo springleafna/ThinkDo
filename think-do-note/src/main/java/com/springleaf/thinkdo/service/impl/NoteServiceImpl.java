@@ -27,6 +27,10 @@ import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import com.springleaf.thinkdo.constant.NoteConstant;
+import com.springleaf.thinkdo.domain.dto.StoredFileDTO;
+import com.springleaf.thinkdo.service.FileStorageService;
+import org.springframework.web.multipart.MultipartFile;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
@@ -41,42 +45,18 @@ import java.util.stream.Collectors;
 @Slf4j
 public class NoteServiceImpl extends ServiceImpl<NoteMapper, NoteEntity> implements NoteService {
 
-
-    /** 提示词模板路径前缀 */
-    private static final String PROMPT_TEMPLATE_PREFIX = "classpath:prompts/ai-";
-
-    /** 提示词模板路径后缀 */
-    private static final String PROMPT_TEMPLATE_SUFFIX = ".st";
-
-    /** HTML 安全标签白名单 */
-    private static final String[] SAFE_HTML_TAGS = {"h1", "h2", "h3", "p", "ul", "ol",
-            "li", "blockquote", "code", "pre", "a", "strong", "em", "del"};
-
-    /** HTML 安全属性白名单（格式：标签名:属性名） */
-    private static final String[][] SAFE_HTML_ATTRIBUTES = {{"a", "href"}};
-
-    /** 默认语气 */
-    private static final String DEFAULT_TONE = "neutral";
-
-    /** 默认扩写程度 */
-    private static final String DEFAULT_LENGTH = "medium";
-
-    /** 默认语言 */
-    private static final String DEFAULT_LANGUAGE = "zh";
-
-    /** 预览内容最大长度 */
-    private static final int PREVIEW_MAX_LENGTH = 100;
-
     private final NoteMapper noteMapper;
     private final NoteCategoryMapper noteCategoryMapper;
     private final ChatClient chatClient;
     private final ResourceLoader resourceLoader;
+    private final FileStorageService fileStorageService;
 
-    public NoteServiceImpl(NoteMapper noteMapper, NoteCategoryMapper noteCategoryMapper, ChatClient.Builder builder, ResourceLoader resourceLoader) {
+    public NoteServiceImpl(NoteMapper noteMapper, NoteCategoryMapper noteCategoryMapper, ChatClient.Builder builder, ResourceLoader resourceLoader, FileStorageService fileStorageService) {
         this.noteMapper = noteMapper;
         this.noteCategoryMapper = noteCategoryMapper;
         this.chatClient = builder.build();
         this.resourceLoader = resourceLoader;
+        this.fileStorageService = fileStorageService;
     }
 
     @Override
@@ -359,15 +339,15 @@ public class NoteServiceImpl extends ServiceImpl<NoteMapper, NoteEntity> impleme
     private Map<String, Object> buildParams(AiTransformReq req) {
         String tone = Optional.ofNullable(req.getOptions())
                 .map(AiOptions::getTone)
-                .orElse(DEFAULT_TONE);
+                .orElse(NoteConstant.DEFAULT_TONE);
 
         String length = Optional.ofNullable(req.getOptions())
                 .map(AiOptions::getTargetLength)
-                .orElse(DEFAULT_LENGTH);
+                .orElse(NoteConstant.DEFAULT_LENGTH);
 
         String language = Optional.ofNullable(req.getOptions())
                 .map(AiOptions::getLanguage)
-                .orElse(DEFAULT_LANGUAGE);
+                .orElse(NoteConstant.DEFAULT_LANGUAGE);
 
         return Map.of(
                 "text", req.getText(),
@@ -381,7 +361,7 @@ public class NoteServiceImpl extends ServiceImpl<NoteMapper, NoteEntity> impleme
      * 根据操作类型选择对应的提示词模板
      */
     private Resource selectTemplate(AiActionEnum action) {
-        String templatePath = PROMPT_TEMPLATE_PREFIX + action.name().toLowerCase() + PROMPT_TEMPLATE_SUFFIX;
+        String templatePath = NoteConstant.PROMPT_TEMPLATE_PREFIX + action.name().toLowerCase() + NoteConstant.PROMPT_TEMPLATE_SUFFIX;
         return resourceLoader.getResource(templatePath);
     }
 
@@ -390,8 +370,8 @@ public class NoteServiceImpl extends ServiceImpl<NoteMapper, NoteEntity> impleme
      */
     private String sanitizeHtml(String html) {
         Safelist safelist = new Safelist();
-        safelist.addTags(SAFE_HTML_TAGS);
-        for (String[] attr : SAFE_HTML_ATTRIBUTES) {
+        safelist.addTags(NoteConstant.SAFE_HTML_TAGS);
+        for (String[] attr : NoteConstant.SAFE_HTML_ATTRIBUTES) {
             safelist.addAttributes(attr[0], attr[1]);
         }
         return Jsoup.clean(html, safelist);
@@ -445,8 +425,8 @@ public class NoteServiceImpl extends ServiceImpl<NoteMapper, NoteEntity> impleme
         // 使用 Jsoup 去除 HTML 标签
         String plainText = Jsoup.parse(content).text();
         // 截取前N个字符
-        if (plainText.length() > PREVIEW_MAX_LENGTH) {
-            return plainText.substring(0, PREVIEW_MAX_LENGTH);
+        if (plainText.length() > NoteConstant.PREVIEW_MAX_LENGTH) {
+            return plainText.substring(0, NoteConstant.PREVIEW_MAX_LENGTH);
         }
         return plainText;
     }
@@ -490,5 +470,22 @@ public class NoteServiceImpl extends ServiceImpl<NoteMapper, NoteEntity> impleme
                     return resp;
                 })
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public String uploadImage(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new com.springleaf.thinkdo.exception.BusinessException("上传文件不能为空");
+        }
+        String contentType = file.getContentType();
+        if (contentType == null || !contentType.startsWith("image/")) {
+            throw new com.springleaf.thinkdo.exception.BusinessException("只支持上传图片文件");
+        }
+        if (file.getSize() > 5 * 1024 * 1024) {
+            throw new com.springleaf.thinkdo.exception.BusinessException("图片大小不能超过5MB");
+        }
+        String userId = StpUtil.getLoginIdAsString();
+        StoredFileDTO stored = fileStorageService.upload(NoteConstant.NOTE_IMAGE_BUCKET, file, userId + NoteConstant.NOTE_IMAGE_PATH_SUFFIX);
+        return stored.getUrl();
     }
 }

@@ -16,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
@@ -125,5 +126,13 @@ public class NoteController {
     @GetMapping("/recent")
     public Result<List<NoteListItemResp>> getRecentNotes() {
         return Result.success(noteService.getRecentNotes());
+    }
+
+    /**
+     * 上传笔记图片
+     */
+    @PostMapping("/image/upload")
+    public Result<String> uploadImage(@RequestParam("file") MultipartFile file) {
+        return Result.success(noteService.uploadImage(file));
     }
 }

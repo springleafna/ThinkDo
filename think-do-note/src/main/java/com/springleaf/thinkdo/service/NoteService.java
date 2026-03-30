@@ -92,4 +92,12 @@ public interface NoteService extends IService<NoteEntity> {
      * @return 最近修改的两条笔记
      */
     List<NoteListItemResp> getRecentNotes();
+
+    /**
+     * 上传笔记图片到对象存储
+     *
+     * @param file 图片文件
+     * @return 图片访问URL
+     */
+    String uploadImage(org.springframework.web.multipart.MultipartFile file);
 }
