@@ -31,7 +31,7 @@ public class ConversationSummaryEntity {
     /**
      * 摘要最后消息ID
      */
-    private String lastMessageId;
+    private Long lastMessageId;
 
     /**
      * 会话摘要内容

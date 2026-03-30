@@ -5,6 +5,7 @@ import com.springleaf.thinkdo.exception.BusinessException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.io.IOException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -31,6 +32,9 @@ public class SseEmitterSender {
      * Spring 的 SseEmitter 实例，用于实际的 SSE 通信
      */
     public SseEmitterSender(SseEmitter emitter) {
+        if (emitter == null) {
+            throw new IllegalArgumentException("SseEmitter cannot be null");
+        }
         this.emitter = emitter;
     }
 
@@ -59,6 +63,9 @@ public class SseEmitterSender {
                 return;
             }
             emitter.send(SseEmitter.event().name(eventName).data(data));
+        } catch (IOException e) {
+            // 客户端断开连接等 IO 异常
+            fail(e);
         } catch (Exception e) {
             // 发送失败时，关闭连接并通知失败
             fail(e);

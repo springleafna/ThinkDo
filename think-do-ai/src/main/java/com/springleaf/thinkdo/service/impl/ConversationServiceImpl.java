@@ -14,6 +14,7 @@ import com.springleaf.thinkdo.exception.BusinessException;
 import com.springleaf.thinkdo.mapper.ConversationMapper;
 import com.springleaf.thinkdo.mapper.ConversationSummaryMapper;
 import com.springleaf.thinkdo.service.ConversationService;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
@@ -28,16 +29,11 @@ import java.util.stream.Collectors;
  */
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class ConversationServiceImpl extends ServiceImpl<ConversationMapper, ConversationEntity> implements ConversationService {
 
     private final ConversationMapper conversationMapper;
     private final ConversationSummaryMapper conversationSummaryMapper;
-
-    public ConversationServiceImpl(ConversationMapper conversationMapper,
-                                   ConversationSummaryMapper conversationSummaryMapper) {
-        this.conversationMapper = conversationMapper;
-        this.conversationSummaryMapper = conversationSummaryMapper;
-    }
 
     @Override
     @Transactional(rollbackFor = Exception.class)

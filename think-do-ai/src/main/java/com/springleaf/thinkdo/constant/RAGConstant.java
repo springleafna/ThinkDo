@@ -64,4 +64,10 @@ public class RAGConstant {
      */
     public static final String MCP_KB_MIXED_PROMPT_PATH = "prompt/answer-chat-mcp-kb-mixed.st";
 
+    /**
+     * 对话记忆压缩提示词模板路径
+     * 通过 {@code {summary_max_chars}} 控制摘要长度上限
+     */
+    public static final String CONVERSATION_SUMMARY_PROMPT_PATH = "prompt/conversation-summary.st";
+
 }

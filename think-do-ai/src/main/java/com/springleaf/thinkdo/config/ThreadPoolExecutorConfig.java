@@ -152,4 +152,23 @@ public class ThreadPoolExecutorConfig {
         return TtlExecutors.getTtlExecutor(executor);
     }
 
+    /**
+     * 对话记忆摘要生成线程池
+     */
+    @Bean
+    public Executor memorySummaryThreadPoolExecutor() {
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(
+                1,
+                Math.max(2, CPU_COUNT >> 1),
+                60,
+                TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(200),
+                ThreadFactoryBuilder.create()
+                        .setNamePrefix("memory_summary_executor_")
+                        .build(),
+                new ThreadPoolExecutor.CallerRunsPolicy()
+        );
+        return TtlExecutors.getTtlExecutor(executor);
+    }
+
 }
