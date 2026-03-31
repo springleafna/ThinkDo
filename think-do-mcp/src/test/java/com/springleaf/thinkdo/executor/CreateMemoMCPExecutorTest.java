@@ -9,6 +9,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.TestPropertySource;
 
 import java.util.Map;
 
@@ -19,7 +20,9 @@ import static org.junit.jupiter.api.Assertions.*;
  * 依赖真实数据库，请确保 application.yml 中数据源配置正确，并将 TEST_USER_ID 替换为真实用户ID
  */
 @Slf4j
-@SpringBootTest(classes = MCPServerApplication.class)
+@SpringBootTest(classes = MCPServerApplication.class,
+        args = "--spring.config.import=optional:file:../.env[.properties]")
+@TestPropertySource(locations = "classpath:application.yml")
 public class CreateMemoMCPExecutorTest {
 
     @Autowired

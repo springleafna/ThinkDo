@@ -475,14 +475,14 @@ public class NoteServiceImpl extends ServiceImpl<NoteMapper, NoteEntity> impleme
     @Override
     public String uploadImage(MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw new com.springleaf.thinkdo.exception.BusinessException("上传文件不能为空");
+            throw new BusinessException("上传文件不能为空");
         }
         String contentType = file.getContentType();
         if (contentType == null || !contentType.startsWith("image/")) {
-            throw new com.springleaf.thinkdo.exception.BusinessException("只支持上传图片文件");
+            throw new BusinessException("只支持上传图片文件");
         }
         if (file.getSize() > 5 * 1024 * 1024) {
-            throw new com.springleaf.thinkdo.exception.BusinessException("图片大小不能超过5MB");
+            throw new BusinessException("图片大小不能超过5MB");
         }
         String userId = StpUtil.getLoginIdAsString();
         StoredFileDTO stored = fileStorageService.upload(NoteConstant.NOTE_IMAGE_BUCKET, file, userId + NoteConstant.NOTE_IMAGE_PATH_SUFFIX);

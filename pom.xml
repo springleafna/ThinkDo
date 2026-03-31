@@ -35,6 +35,7 @@
         <module>think-do-plan</module>
         <!-- 启动器模块：SpringBoot启动类 -->
         <module>think-do-start</module>
+        <!-- MCP模块：MCP服务 -->
         <module>think-do-mcp</module>
     </modules>
 
@@ -110,6 +111,11 @@
             <dependency>
                 <groupId>com.springleaf</groupId>
                 <artifactId>think-do-start</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.springleaf</groupId>
+                <artifactId>think-do-mcp</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

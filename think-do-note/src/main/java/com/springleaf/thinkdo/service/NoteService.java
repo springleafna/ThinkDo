@@ -9,6 +9,7 @@ import com.springleaf.thinkdo.domain.request.UpdateNoteReq;
 import com.springleaf.thinkdo.domain.response.NoteInfoResp;
 import com.springleaf.thinkdo.domain.response.NoteListItemResp;
 import com.springleaf.thinkdo.domain.response.NoteStatisticsResp;
+import org.springframework.web.multipart.MultipartFile;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
@@ -99,5 +100,5 @@ public interface NoteService extends IService<NoteEntity> {
      * @param file 图片文件
      * @return 图片访问URL
      */
-    String uploadImage(org.springframework.web.multipart.MultipartFile file);
+    String uploadImage(MultipartFile file);
 }

@@ -1,0 +1,11 @@
+FROM eclipse-temurin:21-jre
+
+WORKDIR /app
+
+COPY think-do-mcp/target/think-do-mcp-1.0-SNAPSHOT.jar app.jar
+
+EXPOSE 9099
+
+ENV JAVA_OPTS="-Xms256m -Xmx512m -XX:+UseContainerSupport"
+
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]

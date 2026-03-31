@@ -20,9 +20,9 @@ jobs:
           distribution: 'temurin'
           cache: maven  # 添加 Maven 缓存，加速构建
 
-      # 3. 编译项目（跳过测试，避免测试失败导致部署中断）
+      # 3. 编译项目（同时构建主应用和 MCP Server）
       - name: Build project
-        run: mvn clean package -DskipTests -pl think-do-start -am
+        run: mvn clean package -DskipTests -pl think-do-start,think-do-mcp -am
 
       # 4. 登录阿里云
       - name: Login to Alibaba Cloud ACR
@@ -32,17 +32,25 @@ jobs:
           username: ${{ secrets.REGISTRY_USERNAME }}
           password: ${{ secrets.REGISTRY_PASSWORD }}
 
-      # 5. 构建镜像并推送到阿里云
-      - name: Build and push Docker image
+      # 5. 构建并推送主应用镜像
+      - name: Build and push main app image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./Dockerfile
           push: true
-          # 这样写能保证每次都是最新的 latest
           tags: ${{ secrets.REGISTRY_URL }}/${{ secrets.IMAGE_NAME }}:latest
 
-      # 6. 上传文件到服务器
+      # 6. 构建并推送 MCP Server 镜像
+      - name: Build and push MCP Server image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.mcp
+          push: true
+          tags: ${{ secrets.REGISTRY_URL }}/${{ secrets.IMAGE_NAME_MCP }}:latest
+
+      # 7. 上传文件到服务器
       - name: Upload to server
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -54,7 +62,7 @@ jobs:
           target: /data/project/thinkdo/backend/
           overwrite: true
 
-      # 7. 在服务器上构建镜像并部署
+      # 8. 在服务器上构建镜像并部署
       - name: Deploy on server
         uses: appleboy/ssh-action@v1.0.3
         with:

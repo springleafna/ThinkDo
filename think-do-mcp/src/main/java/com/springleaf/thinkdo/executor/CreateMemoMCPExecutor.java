@@ -10,6 +10,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -104,6 +106,9 @@ public class CreateMemoMCPExecutor implements MCPToolExecutor {
             memo.setTag(tag);
             memo.setBackgroundColor(backgroundColor);
             memo.setPinned(0);
+            LocalDateTime now = LocalDateTime.now(ZoneId.of("Asia/Shanghai"));
+            memo.setCreatedAt(now);
+            memo.setUpdatedAt(now);
 
             memoMapper.insert(memo);
 

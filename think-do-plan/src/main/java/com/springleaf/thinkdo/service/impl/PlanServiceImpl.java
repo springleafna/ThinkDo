@@ -3,13 +3,12 @@ package com.springleaf.thinkdo.service.impl;
 import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.springleaf.thinkdo.chat.RoutingLLMService;
+import com.springleaf.thinkdo.chat.LLMService;
 import com.springleaf.thinkdo.domain.dto.AiPlanOutput;
 import com.springleaf.thinkdo.domain.entity.PlanCategoryEntity;
 import com.springleaf.thinkdo.domain.entity.PlanEntity;
 import com.springleaf.thinkdo.domain.entity.PlanStepEntity;
 import com.springleaf.thinkdo.domain.request.*;
-import com.springleaf.thinkdo.domain.response.PlanCategoryInfoResp;
 import com.springleaf.thinkdo.domain.response.PlanInfoResp;
 import com.springleaf.thinkdo.domain.response.PlanQuadrantResp;
 import com.springleaf.thinkdo.domain.response.PlanQuadrantResp.PlanQuadrantInfoResp;
@@ -24,9 +23,7 @@ import com.springleaf.thinkdo.mapper.PlanMapper;
 import com.springleaf.thinkdo.mapper.PlanStepMapper;
 import com.springleaf.thinkdo.service.PlanCategoryService;
 import com.springleaf.thinkdo.service.PlanService;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.converter.BeanOutputConverter;
@@ -54,18 +51,18 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, PlanEntity> impleme
     private final PlanCategoryService planCategoryService;
     private final PlanStepMapper planStepMapper;
     private final ResourceLoader resourceLoader;
-    private final RoutingLLMService routingLLMService;
+    private final LLMService llmService;
 
 
     public PlanServiceImpl(PlanMapper planMapper, PlanCategoryMapper planCategoryMapper,
                            PlanCategoryService planCategoryService, PlanStepMapper planStepMapper,
-                           ResourceLoader resourceLoader, RoutingLLMService routingLLMService) {
+                           ResourceLoader resourceLoader, LLMService llmService) {
         this.planMapper = planMapper;
         this.planCategoryMapper = planCategoryMapper;
         this.planCategoryService = planCategoryService;
         this.planStepMapper = planStepMapper;
         this.resourceLoader = resourceLoader;
-        this.routingLLMService = routingLLMService;
+        this.llmService = llmService;
     }
 
     @Override
@@ -182,7 +179,7 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, PlanEntity> impleme
         log.info("AI构建的计划创建提示词：\n{}", promptContent);
 
         // 调用AI生成计划
-        String aiResponse = routingLLMService.chat(promptContent);
+        String aiResponse = llmService.chat(promptContent);
         log.info("AI生成的计划创建结果：\n{}", aiResponse);
 
         // 使用 BeanOutputConverter 解析响应
