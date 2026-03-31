@@ -51,7 +51,7 @@ public class PlanStepController {
     /**
      * 获取计划步骤详情
      */
-    @GetMapping("/{id}")
+    @GetMapping("/detail/{id}")
     public Result<PlanStepInfoResp> getStepById(@PathVariable Long id) {
         return Result.success(planStepService.getStepById(id));
     }

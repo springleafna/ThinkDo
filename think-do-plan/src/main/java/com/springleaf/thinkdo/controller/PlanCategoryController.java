@@ -51,7 +51,7 @@ public class PlanCategoryController {
     /**
      * 获取计划分类详情
      */
-    @GetMapping("/{id}")
+    @GetMapping("/detail/{id}")
     public Result<PlanCategoryInfoResp> getCategoryById(@PathVariable Long id) {
         return Result.success(planCategoryService.getCategoryById(id));
     }

@@ -70,7 +70,7 @@ public class PlanExecutionController {
     /**
      * 获取每日清单详情
      */
-    @GetMapping("/{id}")
+    @GetMapping("/detail/{id}")
     public Result<PlanExecutionInfoResp> getPlanExecutionById(@PathVariable Long id) {
         return Result.success(planExecutionService.getPlanExecutionById(id));
     }

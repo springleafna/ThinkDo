@@ -64,7 +64,7 @@ public class PlanController {
     /**
      * 获取计划详情
      */
-    @GetMapping("/{id}")
+    @GetMapping("/detail/{id}")
     public Result<PlanInfoResp> getPlanById(@PathVariable Long id) {
         return Result.success(planService.getPlanById(id));
     }

@@ -52,7 +52,7 @@ public class MemoController {
     /**
      * 获取便签详情
      */
-    @GetMapping("/{id}")
+    @GetMapping("/detail/{id}")
     public Result<MemoInfoResp> getMemoById(@PathVariable Long id) {
         return Result.success(memoService.getMemoById(id));
     }

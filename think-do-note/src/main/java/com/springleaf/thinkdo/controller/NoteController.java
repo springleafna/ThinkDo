@@ -61,7 +61,7 @@ public class NoteController {
     /**
      * 获取笔记详情
      */
-    @GetMapping("/{id}")
+    @GetMapping("/detail/{id}")
     public Result<NoteInfoResp> getNoteById(@PathVariable Long id) {
         return Result.success(noteService.getNoteById(id));
     }
