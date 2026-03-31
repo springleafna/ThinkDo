@@ -126,7 +126,7 @@ rag:
   mcp:
     servers:
       - name: default
-        url: http://localhost:9099
+        url: ${MCP_SERVER_URL:http://localhost:9099}
 # Sa-Token配置
 sa-token:
   # token名称 (同时也是cookie名称)
