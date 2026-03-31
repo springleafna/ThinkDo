@@ -25,7 +25,7 @@ services:
 
   thinkdo-mcp:
     image: crpi-uzhlbflj0lsdpu7g.cn-hangzhou.personal.cr.aliyuncs.com/springleafna/thinkdo-mcp:latest
-    container_name: thinkdo-mcp
+    container_name: think-do-mcp
     ports:
       - "9099:9099"
     env_file:
