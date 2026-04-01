@@ -42,3 +42,9 @@ rustfs:
 
 milvus:
   uri: http://${IP}:${MILVUS_PORT}
+
+rag:
+  mcp:
+    servers:
+      - name: default
+        url: http://localhost:9099

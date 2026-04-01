@@ -43,6 +43,12 @@ rustfs:
 milvus:
   uri: http://${IP}:${MILVUS_PORT}
 
+rag:
+  mcp:
+    servers:
+      - name: default
+        url: ${MCP_SERVER_URL}
+
 logging:
   file:
     name: /app/logs/app.log
