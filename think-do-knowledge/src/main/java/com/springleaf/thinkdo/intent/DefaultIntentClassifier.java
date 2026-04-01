@@ -183,39 +183,22 @@ public class DefaultIntentClassifier implements IntentClassifier, IntentNodeRegi
     }
 
     /**
-     * 确保Redis缓存中有意图树数据
-     * 如果缓存不存在，从数据库加载并保存到Redis
-     */
-    private void ensureIntentTreeCached(Long userId) {
-        if (!intentTreeCacheManager.isCacheExists()) {
-            List<IntentNode> roots = loadIntentTreeFromDB(userId);
-            if (!roots.isEmpty()) {
-                intentTreeCacheManager.saveIntentTreeToCache(roots);
-                log.info("意图树已从数据库加载并缓存到Redis");
-            }
-        }
-    }
-
-    /**
-     * 从Redis加载意图树并构建内存结构
-     * 每次调用都会重新从Redis读取，确保数据是最新的
+     * 从 Redis 缓存加载意图树，缓存未命中时从数据库加载并回填缓存
      */
     public IntentTreeData loadIntentTreeData(Long userId) {
-        // TODO: 需要从redis中获取每个用户的意图树
-        // 1. 从Redis读取（如果不存在会自动从数据库加载）
-       /* List<IntentNode> roots = intentTreeCacheManager.getIntentTreeFromCache();
+        // 1. 先查 Redis 缓存
+        List<IntentNode> roots = intentTreeCacheManager.getIntentTreeFromCache(userId);
 
-        // 2. 如果Redis也没有，从数据库加载并缓存
+        // 2. 缓存未命中，从数据库加载并写入缓存
         if (CollUtil.isEmpty(roots)) {
             roots = loadIntentTreeFromDB(userId);
-            if (!roots.isEmpty()) {
-                intentTreeCacheManager.saveIntentTreeToCache(roots);
+            if (CollUtil.isNotEmpty(roots)) {
+                intentTreeCacheManager.saveIntentTreeToCache(userId, roots);
+                log.info("用户 {} 意图树已从数据库加载并缓存到 Redis", userId);
             }
-        }*/
+        }
 
-        List<IntentNode> roots = loadIntentTreeFromDB(userId);
-
-        // 3. 构建内存结构（临时使用）
+        // 3. 构建内存结构
         if (CollUtil.isEmpty(roots)) {
             return new IntentTreeData(List.of(), List.of(), Map.of());
         }
@@ -227,7 +210,7 @@ public class DefaultIntentClassifier implements IntentClassifier, IntentNodeRegi
         Map<String, IntentNode> id2Node = allNodes.stream()
                 .collect(Collectors.toMap(IntentNode::getId, n -> n));
 
-        log.debug("意图树数据加载完成, 总节点数: {}, 叶子节点数: {}", allNodes.size(), leafNodes.size());
+        log.debug("用户 {} 意图树加载完成, 总节点数: {}, 叶子节点数: {}", userId, allNodes.size(), leafNodes.size());
 
         return new IntentTreeData(allNodes, leafNodes, id2Node);
     }

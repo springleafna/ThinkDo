@@ -24,6 +24,7 @@ import com.springleaf.thinkdo.mapper.IntentNodeMapper;
 import com.springleaf.thinkdo.mapper.KnowledgeBaseMapper;
 import com.springleaf.thinkdo.mapper.KnowledgeDocumentMapper;
 import com.springleaf.thinkdo.intent.IntentResolver;
+import com.springleaf.thinkdo.intent.IntentTreeCacheManager;
 import com.springleaf.thinkdo.service.KnowledgeBaseService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -53,6 +54,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     private final KnowledgeDocumentMapper knowledgeDocumentMapper;
     private final IntentNodeMapper intentNodeMapper;
     private final IntentResolver intentResolver;
+    private final IntentTreeCacheManager intentTreeCacheManager;
 
     @Transactional
     @Override
@@ -121,6 +123,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
                 .updatedBy(currentUserId)
                 .build();
         intentNodeMapper.insert(intentNode);
+        intentTreeCacheManager.invalidateByScope(IntentKind.KB.getCode(), scope.getValue(), currentUserId);
 
         log.info("用户 {} (角色:{}) 成功创建 {} 知识库，名称: {}", currentUserId, userRole, scope, requestParam.getName());
         return String.valueOf(kb.getId());
@@ -168,6 +171,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
 
         kb.setUpdatedBy(currentUserId);
         knowledgeBaseMapper.updateById(kb);
+        intentTreeCacheManager.invalidateByScope(IntentKind.KB.getCode(), kb.getScope().getValue(), kb.getCreatedBy());
 
         log.info("用户 {} 成功更新知识库 {}", currentUserId, requestParam.getId());
     }
@@ -208,6 +212,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         kb.setName(requestParam.getName());
         kb.setUpdatedBy(currentUserId);
         knowledgeBaseMapper.updateById(kb);
+        intentTreeCacheManager.invalidateByScope(IntentKind.KB.getCode(), kb.getScope().getValue(), kb.getCreatedBy());
 
         log.info("用户 {} 成功重命名知识库 {}, 新名称: {}", currentUserId, kbId, requestParam.getName());
     }
@@ -234,6 +239,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         }
 
         knowledgeBaseMapper.deleteById(kbId);
+        intentTreeCacheManager.invalidateByScope(IntentKind.KB.getCode(), kb.getScope().getValue(), kb.getCreatedBy());
         log.info("用户 {} 成功删除知识库 {}", currentUserId, kbId);
     }
 

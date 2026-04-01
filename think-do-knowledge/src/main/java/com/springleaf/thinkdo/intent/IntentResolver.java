@@ -33,14 +33,17 @@ public class IntentResolver {
     private final IntentClassifier intentClassifier;
     private final Executor intentClassifyExecutor;
     private final IntentNodeMapper intentNodeMapper;
+    private final IntentTreeCacheManager intentTreeCacheManager;
 
     public IntentResolver(
             @Qualifier("defaultIntentClassifier") IntentClassifier intentClassifier,
             @Qualifier("intentClassifyThreadPoolExecutor") Executor intentClassifyExecutor,
-            IntentNodeMapper intentNodeMapper) {
+            IntentNodeMapper intentNodeMapper,
+            IntentTreeCacheManager intentTreeCacheManager) {
         this.intentClassifier = intentClassifier;
         this.intentClassifyExecutor = intentClassifyExecutor;
         this.intentNodeMapper = intentNodeMapper;
+        this.intentTreeCacheManager = intentTreeCacheManager;
     }
 
     /**
@@ -52,6 +55,7 @@ public class IntentResolver {
     public void ensureUserIntentTreeExists(Long userId) {
         String domainCode = "root_user_" + userId;
         String categoryCode = "category_user_kb_" + userId;
+        boolean created = false;
 
         // 检查domain节点是否存在
         IntentNodeEntity domainNode = intentNodeMapper.selectOne(
@@ -80,6 +84,7 @@ public class IntentResolver {
                     .updatedBy(userId)
                     .build();
             intentNodeMapper.insert(domainNode);
+            created = true;
             log.info("为用户 {} 创建domain意图节点: {}", userId, domainCode);
         }
 
@@ -110,7 +115,13 @@ public class IntentResolver {
                     .updatedBy(userId)
                     .build();
             intentNodeMapper.insert(categoryNode);
+            created = true;
             log.info("为用户 {} 创建category意图节点: {}", userId, categoryCode);
+        }
+
+        // 只有实际创建了新节点时才需要失效缓存
+        if (created) {
+            intentTreeCacheManager.clearUserCache(userId);
         }
     }
 

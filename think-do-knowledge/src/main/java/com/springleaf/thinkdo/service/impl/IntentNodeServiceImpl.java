@@ -14,6 +14,7 @@ import com.springleaf.thinkdo.domain.response.IntentNodeTreeResp;
 import com.springleaf.thinkdo.enums.IntentKind;
 import com.springleaf.thinkdo.enums.IntentLevel;
 import com.springleaf.thinkdo.exception.BusinessException;
+import com.springleaf.thinkdo.intent.IntentTreeCacheManager;
 import com.springleaf.thinkdo.mapper.IntentNodeMapper;
 import com.springleaf.thinkdo.service.IntentNodeService;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +32,7 @@ import java.util.stream.Collectors;
 public class IntentNodeServiceImpl implements IntentNodeService {
 
     private final IntentNodeMapper intentNodeMapper;
+    private final IntentTreeCacheManager intentTreeCacheManager;
 
     @Override
     public List<IntentNodeTreeResp> getFullTree() {
@@ -100,6 +102,7 @@ public class IntentNodeServiceImpl implements IntentNodeService {
                 .deleted(0)
                 .build();
         intentNodeMapper.insert(entity);
+        invalidateCacheForNode(entity);
     }
 
     @Override
@@ -142,6 +145,7 @@ public class IntentNodeServiceImpl implements IntentNodeService {
         }
 
         intentNodeMapper.update(null, updateWrapper);
+        invalidateCacheForNode(entity);
     }
 
     @Override
@@ -162,6 +166,7 @@ public class IntentNodeServiceImpl implements IntentNodeService {
                 new LambdaQueryWrapper<IntentNodeEntity>()
                         .in(IntentNodeEntity::getId, allIds)
         );
+        invalidateCacheForNode(entity);
     }
 
     @Override
@@ -178,6 +183,7 @@ public class IntentNodeServiceImpl implements IntentNodeService {
                         .set(IntentNodeEntity::getEnabled, newEnabled)
                         .set(IntentNodeEntity::getUpdatedBy, StpUtil.getLoginIdAsLong())
         );
+        invalidateCacheForNode(entity);
     }
 
     @Override
@@ -198,6 +204,15 @@ public class IntentNodeServiceImpl implements IntentNodeService {
         IPage<IntentNodeEntity> result = intentNodeMapper.selectPage(page, queryWrapper);
 
         return result.convert(this::toTreeResp);
+    }
+
+    /**
+     * 根据节点属性判断失效范围并清除缓存
+     */
+    private void invalidateCacheForNode(IntentNodeEntity entity) {
+        intentTreeCacheManager.invalidateByScope(
+                entity.getKind(), entity.getScope(), entity.getCreatedBy()
+        );
     }
 
     /**
