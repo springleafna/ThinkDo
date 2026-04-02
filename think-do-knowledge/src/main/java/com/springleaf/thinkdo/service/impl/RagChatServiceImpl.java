@@ -1,7 +1,6 @@
 package com.springleaf.thinkdo.service.impl;
 
 import cn.dev33.satoken.stp.StpUtil;
-import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import com.springleaf.thinkdo.chat.ChatMessage;
@@ -28,10 +27,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.util.ArrayList;
 import java.util.List;
 
-import static com.springleaf.thinkdo.constant.RAGConstant.CHAT_SYSTEM_PROMPT_PATH;
 import static com.springleaf.thinkdo.constant.RAGConstant.DEFAULT_TOP_K;
 
 @Service
@@ -50,12 +47,11 @@ public class RagChatServiceImpl implements RagChatService {
     private final RAGPromptService promptBuilder;
 
     @Override
-    public void streamChat(String question, String conversationId, Boolean deepThinking, Boolean useKnowledgeBase, SseEmitter emitter) {
+    public void streamChat(String question, String conversationId, Boolean deepThinking, SseEmitter emitter) {
         String actualConversationId = StrUtil.isBlank(conversationId) ? IdUtil.getSnowflakeNextIdStr() : conversationId;
         String taskId = IdUtil.getSnowflakeNextIdStr();
         log.info("开始流式对话，会话ID：{}，任务ID：{}", actualConversationId, taskId);
         boolean thinkingEnabled = Boolean.TRUE.equals(deepThinking);
-        boolean knowledgeBaseEnabled = Boolean.TRUE.equals(useKnowledgeBase);
 
         StreamCallback callback = callbackFactory.createChatEventHandler(emitter, actualConversationId, taskId);
         Long userId = StpUtil.getLoginIdAsLong();
@@ -65,41 +61,36 @@ public class RagChatServiceImpl implements RagChatService {
         
         // 加载历史消息
         List<ChatMessage> history = messageService.load(actualConversationId, userId);
-        
-        // RAG流程：根据检索到的知识构建系统提示词
-        if (knowledgeBaseEnabled) {
-            // 确保用户意图树存在（domain和category级别节点）
-            intentResolver.ensureUserIntentTreeExists(userId);
-            // 问题拆分
-            RewriteResult rewriteResult = queryRewriteService.rewriteWithSplit(question, history);
-            // 获取每个子问题及其意图结果
-            List<SubQuestionIntent> subIntents = intentResolver.resolve(rewriteResult, userId);
-            // 根据意图节点进行向量化检索
-            RetrievalContext ctx = retrievalEngine.retrieve(subIntents, DEFAULT_TOP_K, userId);
-            if (ctx.isEmpty()) {
-                String emptyReply = "未检索到与问题相关的文档内容。";
-                callback.onContent(emptyReply);
-                callback.onComplete();
-                return;
-            }
 
-            // 聚合所有意图用于 prompt 规划
-            IntentGroup mergedGroup = intentResolver.mergeIntentGroup(subIntents);
+        // 确保用户意图树存在（domain和category级别节点）
+        intentResolver.ensureUserIntentTreeExists(userId);
 
-            StreamCancellationHandle handle = streamLLMResponse(
-                    rewriteResult,
-                    ctx,
-                    mergedGroup,
-                    history,
-                    thinkingEnabled,
-                    callback
-            );
-            taskManager.bindHandle(taskId, handle);
+        // 问题拆分
+        RewriteResult rewriteResult = queryRewriteService.rewriteWithSplit(question, history);
+
+        // 获取每个子问题及其意图结果
+        List<SubQuestionIntent> subIntents = intentResolver.resolve(rewriteResult, userId);
+
+        // 根据意图节点进行向量化检索
+        RetrievalContext ctx = retrievalEngine.retrieve(subIntents, DEFAULT_TOP_K, userId);
+        if (ctx.isEmpty()) {
+            String emptyReply = "未检索到与问题相关的文档内容。";
+            callback.onContent(emptyReply);
+            callback.onComplete();
             return;
         }
 
-        // 未启用知识库则是普通对话场景
-        StreamCancellationHandle handle = streamSystemResponse(question, history, "", callback);
+        // 聚合所有意图用于 prompt 规划
+        IntentGroup mergedGroup = intentResolver.mergeIntentGroup(subIntents);
+
+        StreamCancellationHandle handle = streamLLMResponse(
+                rewriteResult,
+                ctx,
+                mergedGroup,
+                history,
+                thinkingEnabled,
+                callback
+        );
         taskManager.bindHandle(taskId, handle);
     }
 
@@ -134,26 +125,5 @@ public class RagChatServiceImpl implements RagChatService {
     @Override
     public void stopTask(String taskId) {
         taskManager.cancel(taskId);
-    }
-
-    private StreamCancellationHandle streamSystemResponse(String question, List<ChatMessage> history,
-                                                          String customPrompt, StreamCallback callback) {
-        String systemPrompt = StrUtil.isNotBlank(customPrompt)
-                ? customPrompt
-                : promptTemplateLoader.load(CHAT_SYSTEM_PROMPT_PATH);
-
-        List<ChatMessage> messages = new ArrayList<>();
-        messages.add(ChatMessage.system(systemPrompt));
-        if (CollUtil.isNotEmpty(history)) {
-            messages.addAll(history.subList(0, history.size() - 1));
-        }
-        messages.add(ChatMessage.user(question));
-
-        ChatRequest req = ChatRequest.builder()
-                .messages(messages)
-                .temperature(0.7D)
-                .thinking(false)
-                .build();
-        return llmService.streamChat(req, callback);
     }
 }

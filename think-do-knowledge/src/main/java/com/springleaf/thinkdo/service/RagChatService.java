@@ -12,7 +12,7 @@ public interface RagChatService {
      * @param deepThinking   是否开启深度思考模式
      * @param emitter        SSE 发射器
      */
-    void streamChat(String question, String conversationId, Boolean deepThinking, Boolean useKnowledgeBase, SseEmitter emitter);
+    void streamChat(String question, String conversationId, Boolean deepThinking, SseEmitter emitter);
 
     /**
      * 停止指定任务 ID 的流式会话
