@@ -23,10 +23,9 @@ public class SystemInterceptorConfig implements WebMvcConfigurer {
                 .addPathPatterns("/**")
                 .excludePathPatterns(
                         "/error",
-                        "/swagger-resources/**",
-                        "/v3/api-docs/**",
-                        "/swagger-ui/**",
-                        "/doc.html" // knife4j文档
+                        "/system/user/login",
+                        "/system/user/admin/login",
+                        "/system/user/register"
                 );
     }
 }

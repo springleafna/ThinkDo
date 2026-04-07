@@ -1,6 +1,7 @@
 package com.springleaf.thinkdo.service.impl;
 
 import cn.dev33.satoken.stp.StpUtil;
+import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import com.springleaf.thinkdo.chat.ChatMessage;
@@ -27,8 +28,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.util.ArrayList;
 import java.util.List;
 
+import static com.springleaf.thinkdo.constant.RAGConstant.CHAT_SYSTEM_PROMPT_PATH;
 import static com.springleaf.thinkdo.constant.RAGConstant.DEFAULT_TOP_K;
 
 @Service
@@ -71,6 +74,21 @@ public class RagChatServiceImpl implements RagChatService {
         // 获取每个子问题及其意图结果
         List<SubQuestionIntent> subIntents = intentResolver.resolve(rewriteResult, userId);
 
+        // 如果全是SYSTEM类型的意图，则不走向量检索和MCP
+        boolean allSystemOnly = subIntents.stream()
+                .allMatch(si -> intentResolver.isSystemOnly(si.nodeScores()));
+        if (allSystemOnly) {
+            String customPrompt = subIntents.stream()
+                    .flatMap(si -> si.nodeScores().stream())
+                    .map(ns -> ns.getNode().getPromptTemplate())
+                    .filter(StrUtil::isNotBlank)
+                    .findFirst()
+                    .orElse(null);
+            StreamCancellationHandle handle = streamSystemResponse(rewriteResult.rewrittenQuestion(), history, customPrompt, callback);
+            taskManager.bindHandle(taskId, handle);
+            return;
+        }
+
         // 根据意图节点进行向量化检索
         RetrievalContext ctx = retrievalEngine.retrieve(subIntents, DEFAULT_TOP_K, userId);
         if (ctx.isEmpty()) {
@@ -92,6 +110,27 @@ public class RagChatServiceImpl implements RagChatService {
                 callback
         );
         taskManager.bindHandle(taskId, handle);
+    }
+
+    private StreamCancellationHandle streamSystemResponse(String question, List<ChatMessage> history,
+                                                          String customPrompt, StreamCallback callback) {
+        String systemPrompt = StrUtil.isNotBlank(customPrompt)
+                ? customPrompt
+                : promptTemplateLoader.load(CHAT_SYSTEM_PROMPT_PATH);
+
+        List<ChatMessage> messages = new ArrayList<>();
+        messages.add(ChatMessage.system(systemPrompt));
+        if (CollUtil.isNotEmpty(history)) {
+            messages.addAll(history.subList(0, history.size() - 1));
+        }
+        messages.add(ChatMessage.user(question));
+
+        ChatRequest req = ChatRequest.builder()
+                .messages(messages)
+                .temperature(0.7D)
+                .thinking(false)
+                .build();
+        return llmService.streamChat(req, callback);
     }
 
     private StreamCancellationHandle streamLLMResponse(RewriteResult rewriteResult, RetrievalContext ctx,

@@ -81,11 +81,12 @@ public class SiliconFlowChatClient implements ChatClient {
     @Override
     public StreamCancellationHandle streamChat(ChatRequest request, StreamCallback callback, ModelTarget target) {
         Call call = httpClient.newCall(buildStreamRequest(request, target));
+        boolean reasoningEnabled = Boolean.TRUE.equals(request.getThinking());
         return StreamAsyncExecutor.submit(
                 modelStreamExecutor,
                 call,
                 callback,
-                cancelled -> doStream(call, callback, cancelled)
+                cancelled -> doStream(call, callback, cancelled, reasoningEnabled)
         );
     }
 
@@ -101,7 +102,7 @@ public class SiliconFlowChatClient implements ChatClient {
                 .build();
     }
 
-    private void doStream(Call call, StreamCallback callback, AtomicBoolean cancelled) {
+    private void doStream(Call call, StreamCallback callback, AtomicBoolean cancelled, boolean reasoningEnabled) {
         try (Response response = call.execute()) {
             if (!response.isSuccessful()) {
                 String body = readBody(response.body());
@@ -127,7 +128,7 @@ public class SiliconFlowChatClient implements ChatClient {
                 }
 
                 try {
-                    OpenAIStyleSseParser.ParsedEvent event = OpenAIStyleSseParser.parseLine(line, gson, true);
+                    OpenAIStyleSseParser.ParsedEvent event = OpenAIStyleSseParser.parseLine(line, gson, reasoningEnabled);
                     if (event.hasReasoning()) {
                         callback.onThinking(event.reasoning());
                     }
