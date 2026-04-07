@@ -5,6 +5,8 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.springleaf.thinkdo.common.Result;
 import com.springleaf.thinkdo.domain.request.KnowledgeDocumentUpdateReq;
 import com.springleaf.thinkdo.domain.request.KnowledgeDocumentUploadReq;
+import com.springleaf.thinkdo.domain.response.KnowledgeChunkResp;
+import com.springleaf.thinkdo.domain.response.KnowledgeDocumentChunkLogResp;
 import com.springleaf.thinkdo.domain.response.KnowledgeDocumentResp;
 import com.springleaf.thinkdo.domain.response.KnowledgeDocumentSearchResp;
 import com.springleaf.thinkdo.service.KnowledgeDocumentService;
@@ -104,5 +106,21 @@ public class KnowledgeDocumentController {
                                @RequestParam("value") boolean enabled) {
         documentService.enable(docId, enabled);
         return Result.success();
+    }
+
+    /**
+     * 查询文档分块日志
+     */
+    @GetMapping("/knowledge-base/docs/{docId}/chunk-logs")
+    public Result<List<KnowledgeDocumentChunkLogResp>> getChunkLogs(@PathVariable String docId) {
+        return Result.success(documentService.getChunkLogs(docId));
+    }
+
+    /**
+     * 查询文档分块详情列表
+     */
+    @GetMapping("/knowledge-base/docs/{docId}/chunks")
+    public Result<List<KnowledgeChunkResp>> getChunks(@PathVariable String docId) {
+        return Result.success(documentService.getChunks(docId));
     }
 }

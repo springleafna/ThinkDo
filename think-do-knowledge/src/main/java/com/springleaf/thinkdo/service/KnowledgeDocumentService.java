@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.springleaf.thinkdo.domain.request.KnowledgeDocumentUpdateReq;
 import com.springleaf.thinkdo.domain.request.KnowledgeDocumentUploadReq;
+import com.springleaf.thinkdo.domain.response.KnowledgeChunkResp;
+import com.springleaf.thinkdo.domain.response.KnowledgeDocumentChunkLogResp;
 import com.springleaf.thinkdo.domain.response.KnowledgeDocumentResp;
 import com.springleaf.thinkdo.domain.response.KnowledgeDocumentSearchResp;
 import org.springframework.web.multipart.MultipartFile;
@@ -82,4 +84,20 @@ public interface KnowledgeDocumentService {
      * @return 文档列表
      */
     List<KnowledgeDocumentSearchResp> search(String keyword, int limit);
+
+    /**
+     * 查询文档分块日志列表
+     *
+     * @param docId 文档 ID
+     * @return 分块日志列表（按创建时间倒序）
+     */
+    List<KnowledgeDocumentChunkLogResp> getChunkLogs(String docId);
+
+    /**
+     * 查询文档分块详情列表
+     *
+     * @param docId 文档 ID
+     * @return 分块列表（按 chunkIndex 升序）
+     */
+    List<KnowledgeChunkResp> getChunks(String docId);
 }

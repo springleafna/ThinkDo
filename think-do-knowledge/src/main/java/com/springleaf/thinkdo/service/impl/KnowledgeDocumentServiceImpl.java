@@ -14,9 +14,12 @@ import com.springleaf.thinkdo.domain.dto.StoredFileDTO;
 import com.springleaf.thinkdo.domain.entity.KnowledgeBaseEntity;
 import com.springleaf.thinkdo.domain.entity.KnowledgeDocumentChunkLogEntity;
 import com.springleaf.thinkdo.domain.entity.KnowledgeDocumentEntity;
+import com.springleaf.thinkdo.domain.entity.KnowledgeChunkEntity;
 import com.springleaf.thinkdo.domain.request.KnowledgeChunkCreateRequest;
 import com.springleaf.thinkdo.domain.request.KnowledgeDocumentUpdateReq;
 import com.springleaf.thinkdo.domain.request.KnowledgeDocumentUploadReq;
+import com.springleaf.thinkdo.domain.response.KnowledgeChunkResp;
+import com.springleaf.thinkdo.domain.response.KnowledgeDocumentChunkLogResp;
 import com.springleaf.thinkdo.domain.response.KnowledgeDocumentResp;
 import com.springleaf.thinkdo.domain.response.KnowledgeDocumentSearchResp;
 import com.springleaf.thinkdo.enums.DocumentStatus;
@@ -26,6 +29,7 @@ import com.springleaf.thinkdo.exception.BusinessException;
 import com.springleaf.thinkdo.mapper.KnowledgeBaseMapper;
 import com.springleaf.thinkdo.mapper.KnowledgeDocumentChunkLogMapper;
 import com.springleaf.thinkdo.mapper.KnowledgeDocumentMapper;
+import com.springleaf.thinkdo.mapper.KnowledgeChunkMapper;
 import com.springleaf.thinkdo.service.FileStorageService;
 import com.springleaf.thinkdo.service.KnowledgeChunkService;
 import com.springleaf.thinkdo.service.KnowledgeDocumentService;
@@ -66,6 +70,7 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
     private final VectorStoreService vectorStoreService;
     private final KnowledgeChunkService knowledgeChunkService;
     private final KnowledgeDocumentChunkLogMapper chunkLogMapper;
+    private final KnowledgeChunkMapper chunkMapper;
     private final DocumentParserSelector parserSelector;
     private final ObjectMapper objectMapper;
     private final ChunkingStrategyFactory chunkingStrategyFactory;
@@ -286,6 +291,50 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
         documentEntity.setEnabled(enabled ? 1 : 0);
         documentEntity.setUpdatedBy(StpUtil.getLoginIdAsLong());
         docMapper.updateById(documentEntity);
+    }
+
+    @Override
+    public List<KnowledgeDocumentChunkLogResp> getChunkLogs(String docId) {
+        KnowledgeDocumentEntity document = docMapper.selectById(docId);
+        if (document == null) {
+            throw new BusinessException("文档不存在");
+        }
+        LambdaQueryWrapper<KnowledgeDocumentChunkLogEntity> qw = new LambdaQueryWrapper<KnowledgeDocumentChunkLogEntity>()
+                .eq(KnowledgeDocumentChunkLogEntity::getDocId, document.getId())
+                .orderByDesc(KnowledgeDocumentChunkLogEntity::getCreatedAt);
+        List<KnowledgeDocumentChunkLogEntity> logs = chunkLogMapper.selectList(qw);
+        return logs.stream().map(log -> {
+            KnowledgeDocumentChunkLogResp resp = BeanUtil.toBean(log, KnowledgeDocumentChunkLogResp.class);
+            resp.setId(String.valueOf(log.getId()));
+            resp.setDocId(String.valueOf(log.getDocId()));
+            // 计算其他耗时 = 总耗时 - 提取 - 分块 - 向量化
+            if (log.getTotalDuration() != null && log.getExtractDuration() != null
+                    && log.getChunkDuration() != null && log.getEmbeddingDuration() != null) {
+                long other = log.getTotalDuration() - log.getExtractDuration()
+                        - log.getChunkDuration() - log.getEmbeddingDuration();
+                resp.setOtherDuration(Math.max(0, other));
+            }
+            return resp;
+        }).toList();
+    }
+
+    @Override
+    public List<KnowledgeChunkResp> getChunks(String docId) {
+        KnowledgeDocumentEntity document = docMapper.selectById(docId);
+        if (document == null) {
+            throw new BusinessException("文档不存在");
+        }
+        LambdaQueryWrapper<KnowledgeChunkEntity> qw = new LambdaQueryWrapper<KnowledgeChunkEntity>()
+                .eq(KnowledgeChunkEntity::getDocId, document.getId())
+                .orderByAsc(KnowledgeChunkEntity::getChunkIndex);
+        List<KnowledgeChunkEntity> chunks = chunkMapper.selectList(qw);
+        return chunks.stream().map(chunk -> {
+            KnowledgeChunkResp resp = BeanUtil.toBean(chunk, KnowledgeChunkResp.class);
+            resp.setId(String.valueOf(chunk.getId()));
+            resp.setKbId(String.valueOf(chunk.getKbId()));
+            resp.setDocId(String.valueOf(chunk.getDocId()));
+            return resp;
+        }).toList();
     }
 
     @Override
