@@ -24,6 +24,14 @@ spring:
       validation-timeout: 5000  # 5秒，避免验证卡死
       pool-name: mysqlHikariCP
 
+kroki:
+  url: https://kroki.io
+  timeout: 30
+
+open-meteo:
+  url: https://api.open-meteo.com
+  timeout: 15
+
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
