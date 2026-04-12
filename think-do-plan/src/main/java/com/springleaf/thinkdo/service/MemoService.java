@@ -1,10 +1,13 @@
 package com.springleaf.thinkdo.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.springleaf.thinkdo.common.PageResp;
 import com.springleaf.thinkdo.domain.entity.MemoEntity;
+import com.springleaf.thinkdo.domain.request.AdminMemoQueryReq;
 import com.springleaf.thinkdo.domain.request.CreateMemoReq;
 import com.springleaf.thinkdo.domain.request.MemoQueryReq;
 import com.springleaf.thinkdo.domain.request.UpdateMemoReq;
+import com.springleaf.thinkdo.domain.response.AdminMemoInfoResp;
 import com.springleaf.thinkdo.domain.response.MemoInfoResp;
 
 import java.util.List;
@@ -58,4 +61,24 @@ public interface MemoService extends IService<MemoEntity> {
      * @return 便签列表
      */
     List<MemoInfoResp> getLatestMemos();
+
+    /**
+     * 管理员-分页查询所有便签
+     * @param queryReq 查询条件
+     * @return 分页便签列表
+     */
+    PageResp<AdminMemoInfoResp> adminListMemos(AdminMemoQueryReq queryReq);
+
+    /**
+     * 管理员-查看便签详情
+     * @param id 便签ID
+     * @return 便签详情
+     */
+    AdminMemoInfoResp adminGetMemoDetail(Long id);
+
+    /**
+     * 管理员-删除便签
+     * @param id 便签ID
+     */
+    void adminDeleteMemo(Long id);
 }

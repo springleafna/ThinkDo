@@ -1,11 +1,15 @@
 package com.springleaf.thinkdo.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.springleaf.thinkdo.common.PageResp;
 import com.springleaf.thinkdo.domain.entity.NoteEntity;
+import com.springleaf.thinkdo.domain.request.AdminNoteQueryReq;
 import com.springleaf.thinkdo.domain.request.AiTransformReq;
 import com.springleaf.thinkdo.domain.request.CreateNoteReq;
 import com.springleaf.thinkdo.domain.request.NoteQueryReq;
 import com.springleaf.thinkdo.domain.request.UpdateNoteReq;
+import com.springleaf.thinkdo.domain.response.AdminNoteDetailResp;
+import com.springleaf.thinkdo.domain.response.AdminNoteInfoResp;
 import com.springleaf.thinkdo.domain.response.NoteInfoResp;
 import com.springleaf.thinkdo.domain.response.NoteListItemResp;
 import com.springleaf.thinkdo.domain.response.NoteStatisticsResp;
@@ -101,4 +105,24 @@ public interface NoteService extends IService<NoteEntity> {
      * @return 图片访问URL
      */
     String uploadImage(MultipartFile file);
+
+    /**
+     * 管理员-分页查询所有笔记
+     * @param queryReq 查询条件
+     * @return 分页笔记列表
+     */
+    PageResp<AdminNoteInfoResp> adminListNotes(AdminNoteQueryReq queryReq);
+
+    /**
+     * 管理员-查看笔记详情
+     * @param id 笔记ID
+     * @return 笔记详情
+     */
+    AdminNoteDetailResp adminGetNoteDetail(Long id);
+
+    /**
+     * 管理员-删除笔记
+     * @param id 笔记ID
+     */
+    void adminDeleteNote(Long id);
 }

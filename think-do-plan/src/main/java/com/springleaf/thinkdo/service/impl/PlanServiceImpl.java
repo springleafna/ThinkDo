@@ -2,13 +2,19 @@ package com.springleaf.thinkdo.service.impl;
 
 import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.springleaf.thinkdo.chat.LLMService;
+import com.springleaf.thinkdo.common.PageResp;
 import com.springleaf.thinkdo.domain.dto.AiPlanOutput;
 import com.springleaf.thinkdo.domain.entity.PlanCategoryEntity;
 import com.springleaf.thinkdo.domain.entity.PlanEntity;
 import com.springleaf.thinkdo.domain.entity.PlanStepEntity;
+import com.springleaf.thinkdo.domain.entity.UserEntity;
 import com.springleaf.thinkdo.domain.request.*;
+import com.springleaf.thinkdo.domain.response.AdminPlanDetailResp;
+import com.springleaf.thinkdo.domain.response.AdminPlanInfoResp;
 import com.springleaf.thinkdo.domain.response.PlanInfoResp;
 import com.springleaf.thinkdo.domain.response.PlanQuadrantResp;
 import com.springleaf.thinkdo.domain.response.PlanQuadrantResp.PlanQuadrantInfoResp;
@@ -21,6 +27,7 @@ import com.springleaf.thinkdo.exception.BusinessException;
 import com.springleaf.thinkdo.mapper.PlanCategoryMapper;
 import com.springleaf.thinkdo.mapper.PlanMapper;
 import com.springleaf.thinkdo.mapper.PlanStepMapper;
+import com.springleaf.thinkdo.mapper.UserMapper;
 import com.springleaf.thinkdo.service.PlanCategoryService;
 import com.springleaf.thinkdo.service.PlanService;
 import lombok.extern.slf4j.Slf4j;
@@ -50,17 +57,19 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, PlanEntity> impleme
     private final PlanCategoryMapper planCategoryMapper;
     private final PlanCategoryService planCategoryService;
     private final PlanStepMapper planStepMapper;
+    private final UserMapper userMapper;
     private final ResourceLoader resourceLoader;
     private final LLMService llmService;
 
 
     public PlanServiceImpl(PlanMapper planMapper, PlanCategoryMapper planCategoryMapper,
                            PlanCategoryService planCategoryService, PlanStepMapper planStepMapper,
-                           ResourceLoader resourceLoader, LLMService llmService) {
+                           UserMapper userMapper, ResourceLoader resourceLoader, LLMService llmService) {
         this.planMapper = planMapper;
         this.planCategoryMapper = planCategoryMapper;
         this.planCategoryService = planCategoryService;
         this.planStepMapper = planStepMapper;
+        this.userMapper = userMapper;
         this.resourceLoader = resourceLoader;
         this.llmService = llmService;
     }
@@ -730,5 +739,169 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, PlanEntity> impleme
         resp.setRepeatUntil(plan.getRepeatUntil());
         resp.setStatus(plan.getStatus());
         return resp;
+    }
+
+    // ==================== 管理员方法 ====================
+
+    @Override
+    public PageResp<AdminPlanInfoResp> adminListPlans(AdminPlanQueryReq queryReq) {
+        LambdaQueryWrapper<PlanEntity> wrapper = new LambdaQueryWrapper<>();
+
+        if (queryReq.getUserId() != null) {
+            wrapper.eq(PlanEntity::getUserId, queryReq.getUserId());
+        }
+
+        // 用户名模糊搜索
+        if (StringUtils.hasText(queryReq.getUsername())) {
+            List<Long> matchedUserIds = userMapper.selectList(
+                    new LambdaQueryWrapper<UserEntity>().like(UserEntity::getUsername, queryReq.getUsername())
+            ).stream().map(UserEntity::getId).collect(Collectors.toList());
+            if (matchedUserIds.isEmpty()) {
+                return PageResp.of(List.of(), 0L, queryReq.getPageNum(), queryReq.getPageSize());
+            }
+            wrapper.in(PlanEntity::getUserId, matchedUserIds);
+        }
+
+        if (queryReq.getType() != null) {
+            wrapper.eq(PlanEntity::getType, queryReq.getType());
+        }
+        if (queryReq.getPriority() != null) {
+            wrapper.eq(PlanEntity::getPriority, queryReq.getPriority());
+        }
+        if (queryReq.getStatus() != null) {
+            wrapper.eq(PlanEntity::getStatus, queryReq.getStatus());
+        }
+        if (queryReq.getQuadrant() != null) {
+            wrapper.eq(PlanEntity::getQuadrant, queryReq.getQuadrant());
+        }
+        if (StringUtils.hasText(queryReq.getKeyword())) {
+            String keyword = queryReq.getKeyword();
+            wrapper.and(w -> w.like(PlanEntity::getTitle, keyword)
+                    .or()
+                    .like(PlanEntity::getDescription, keyword));
+        }
+
+        wrapper.orderByDesc(PlanEntity::getCreatedAt);
+
+        IPage<PlanEntity> page = new Page<>(queryReq.getPageNum(), queryReq.getPageSize());
+        IPage<PlanEntity> result = planMapper.selectPage(page, wrapper);
+
+        // 批量解析用户名
+        Map<Long, String> usernameMap = batchGetUsernames(
+                result.getRecords().stream().map(PlanEntity::getUserId).collect(Collectors.toSet())
+        );
+
+        // 批量解析分类名
+        Map<Long, String> categoryNameMap = batchGetPlanCategoryNames(
+                result.getRecords().stream().map(PlanEntity::getCategoryId)
+                        .filter(id -> id != null).collect(Collectors.toSet())
+        );
+
+        return PageResp.of(result, plan -> {
+            AdminPlanInfoResp resp = new AdminPlanInfoResp();
+            resp.setId(plan.getId());
+            resp.setUserId(plan.getUserId());
+            resp.setUsername(usernameMap.getOrDefault(plan.getUserId(), ""));
+            resp.setType(plan.getType());
+            resp.setCategoryId(plan.getCategoryId());
+            resp.setCategoryName(plan.getCategoryId() != null ? categoryNameMap.get(plan.getCategoryId()) : null);
+            resp.setTitle(plan.getTitle());
+            resp.setDescription(plan.getDescription());
+            resp.setPriority(plan.getPriority());
+            resp.setQuadrant(plan.getQuadrant());
+            resp.setTags(plan.getTags());
+            resp.setStartTime(plan.getStartTime());
+            resp.setDueTime(plan.getDueTime());
+            resp.setRepeatType(plan.getRepeatType());
+            resp.setStatus(plan.getStatus());
+            resp.setCompletedAt(plan.getCompletedAt());
+            resp.setCreatedAt(plan.getCreatedAt());
+            resp.setUpdatedAt(plan.getUpdatedAt());
+            return resp;
+        });
+    }
+
+    @Override
+    public AdminPlanDetailResp adminGetPlanDetail(Long id) {
+        PlanEntity plan = planMapper.selectById(id);
+        if (plan == null) {
+            throw new BusinessException("计划不存在");
+        }
+
+        UserEntity user = userMapper.selectById(plan.getUserId());
+
+        AdminPlanDetailResp resp = new AdminPlanDetailResp();
+        resp.setId(plan.getId());
+        resp.setUserId(plan.getUserId());
+        resp.setUsername(user != null ? user.getUsername() : "");
+        resp.setType(plan.getType());
+        resp.setCategoryId(plan.getCategoryId());
+        resp.setTitle(plan.getTitle());
+        resp.setDescription(plan.getDescription());
+        resp.setPriority(plan.getPriority());
+        resp.setQuadrant(plan.getQuadrant());
+        resp.setTags(plan.getTags());
+        resp.setStartTime(plan.getStartTime());
+        resp.setDueTime(plan.getDueTime());
+        resp.setRepeatType(plan.getRepeatType());
+        resp.setRepeatConf(plan.getRepeatConf());
+        resp.setRepeatUntil(plan.getRepeatUntil());
+        resp.setStatus(plan.getStatus());
+        resp.setCompletedAt(plan.getCompletedAt());
+        resp.setCreatedAt(plan.getCreatedAt());
+        resp.setUpdatedAt(plan.getUpdatedAt());
+
+        // 分类名
+        if (plan.getCategoryId() != null) {
+            PlanCategoryEntity category = planCategoryMapper.selectById(plan.getCategoryId());
+            if (category != null) {
+                resp.setCategoryName(category.getName());
+            }
+        }
+
+        // 查询步骤
+        List<PlanStepEntity> steps = planStepMapper.selectList(
+                new LambdaQueryWrapper<PlanStepEntity>()
+                        .eq(PlanStepEntity::getPlanId, id)
+                        .orderByAsc(PlanStepEntity::getId)
+        );
+        resp.setSteps(steps.stream().map(step -> {
+            AdminPlanDetailResp.PlanStepInfoResp stepResp = new AdminPlanDetailResp.PlanStepInfoResp();
+            stepResp.setId(step.getId());
+            stepResp.setTitle(step.getTitle());
+            stepResp.setStatus(step.getStatus());
+            return stepResp;
+        }).collect(Collectors.toList()));
+
+        return resp;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void adminDeletePlan(Long id) {
+        PlanEntity plan = planMapper.selectById(id);
+        if (plan == null) {
+            throw new BusinessException("计划不存在");
+        }
+
+        // 删除关联步骤
+        planStepMapper.delete(
+                new LambdaQueryWrapper<PlanStepEntity>().eq(PlanStepEntity::getPlanId, id)
+        );
+
+        planMapper.deleteById(id);
+        log.info("管理员删除计划成功, planId={}, userId={}", id, plan.getUserId());
+    }
+
+    private Map<Long, String> batchGetUsernames(java.util.Set<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) return Map.of();
+        List<UserEntity> users = userMapper.selectBatchIds(userIds);
+        return users.stream().collect(Collectors.toMap(UserEntity::getId, UserEntity::getUsername));
+    }
+
+    private Map<Long, String> batchGetPlanCategoryNames(java.util.Set<Long> categoryIds) {
+        if (categoryIds == null || categoryIds.isEmpty()) return Map.of();
+        List<PlanCategoryEntity> categories = planCategoryMapper.selectBatchIds(categoryIds);
+        return categories.stream().collect(Collectors.toMap(PlanCategoryEntity::getId, PlanCategoryEntity::getName));
     }
 }

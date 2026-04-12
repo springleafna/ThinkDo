@@ -1,10 +1,14 @@
 package com.springleaf.thinkdo.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.springleaf.thinkdo.common.PageResp;
 import com.springleaf.thinkdo.domain.entity.UserEntity;
+import com.springleaf.thinkdo.domain.request.AdminChangeUserRoleReq;
+import com.springleaf.thinkdo.domain.request.AdminUserQueryReq;
 import com.springleaf.thinkdo.domain.request.UserLoginReq;
 import com.springleaf.thinkdo.domain.request.UserRegisterReq;
 import com.springleaf.thinkdo.domain.request.UserUpdatePasswordReq;
+import com.springleaf.thinkdo.domain.response.AdminUserInfoResp;
 import com.springleaf.thinkdo.domain.response.UserInfoResp;
 import com.springleaf.thinkdo.enums.UserRoleEnum;
 import jakarta.validation.Valid;
@@ -44,4 +48,23 @@ public interface UserService extends IService<UserEntity> {
      * @return 用户个人信息
      */
     UserInfoResp getUserInfo();
+
+    /**
+     * 管理员-分页查询用户列表
+     * @param queryReq 查询条件
+     * @return 分页用户列表
+     */
+    PageResp<AdminUserInfoResp> adminListUsers(AdminUserQueryReq queryReq);
+
+    /**
+     * 管理员-修改用户角色
+     * @param req 修改角色请求
+     */
+    void adminChangeUserRole(AdminChangeUserRoleReq req);
+
+    /**
+     * 管理员-删除用户
+     * @param userId 用户ID
+     */
+    void adminDeleteUser(Long userId);
 }

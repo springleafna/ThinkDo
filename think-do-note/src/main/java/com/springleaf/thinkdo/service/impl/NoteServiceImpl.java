@@ -2,10 +2,16 @@ package com.springleaf.thinkdo.service.impl;
 
 import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.springleaf.thinkdo.common.PageResp;
 import com.springleaf.thinkdo.domain.entity.NoteCategoryEntity;
 import com.springleaf.thinkdo.domain.entity.NoteEntity;
+import com.springleaf.thinkdo.domain.entity.UserEntity;
 import com.springleaf.thinkdo.domain.request.*;
+import com.springleaf.thinkdo.domain.response.AdminNoteDetailResp;
+import com.springleaf.thinkdo.domain.response.AdminNoteInfoResp;
 import com.springleaf.thinkdo.domain.response.NoteInfoResp;
 import com.springleaf.thinkdo.domain.response.NoteListItemResp;
 import com.springleaf.thinkdo.domain.response.NoteStatisticsResp;
@@ -14,6 +20,7 @@ import com.springleaf.thinkdo.enums.NoteFavoritedEnum;
 import com.springleaf.thinkdo.exception.BusinessException;
 import com.springleaf.thinkdo.mapper.NoteCategoryMapper;
 import com.springleaf.thinkdo.mapper.NoteMapper;
+import com.springleaf.thinkdo.mapper.UserMapper;
 import com.springleaf.thinkdo.service.NoteService;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
@@ -47,13 +54,15 @@ public class NoteServiceImpl extends ServiceImpl<NoteMapper, NoteEntity> impleme
 
     private final NoteMapper noteMapper;
     private final NoteCategoryMapper noteCategoryMapper;
+    private final UserMapper userMapper;
     private final ChatClient chatClient;
     private final ResourceLoader resourceLoader;
     private final FileStorageService fileStorageService;
 
-    public NoteServiceImpl(NoteMapper noteMapper, NoteCategoryMapper noteCategoryMapper, ChatClient.Builder builder, ResourceLoader resourceLoader, FileStorageService fileStorageService) {
+    public NoteServiceImpl(NoteMapper noteMapper, NoteCategoryMapper noteCategoryMapper, UserMapper userMapper, ChatClient.Builder builder, ResourceLoader resourceLoader, FileStorageService fileStorageService) {
         this.noteMapper = noteMapper;
         this.noteCategoryMapper = noteCategoryMapper;
+        this.userMapper = userMapper;
         this.chatClient = builder.build();
         this.resourceLoader = resourceLoader;
         this.fileStorageService = fileStorageService;
@@ -487,5 +496,139 @@ public class NoteServiceImpl extends ServiceImpl<NoteMapper, NoteEntity> impleme
         String userId = StpUtil.getLoginIdAsString();
         StoredFileDTO stored = fileStorageService.upload(NoteConstant.NOTE_IMAGE_BUCKET, file, userId + NoteConstant.NOTE_IMAGE_PATH_SUFFIX);
         return stored.getUrl();
+    }
+
+    // ==================== 管理员方法 ====================
+
+    @Override
+    public PageResp<AdminNoteInfoResp> adminListNotes(AdminNoteQueryReq queryReq) {
+        LambdaQueryWrapper<NoteEntity> wrapper = new LambdaQueryWrapper<>();
+
+        // 用户ID筛选
+        if (queryReq.getUserId() != null) {
+            wrapper.eq(NoteEntity::getUserId, queryReq.getUserId());
+        }
+
+        // 用户名模糊搜索：先查出匹配的用户ID
+        if (StringUtils.hasText(queryReq.getUsername())) {
+            List<Long> matchedUserIds = userMapper.selectList(
+                    new LambdaQueryWrapper<UserEntity>().like(UserEntity::getUsername, queryReq.getUsername())
+            ).stream().map(UserEntity::getId).collect(Collectors.toList());
+            if (matchedUserIds.isEmpty()) {
+                return PageResp.of(List.of(), 0L, queryReq.getPageNum(), queryReq.getPageSize());
+            }
+            wrapper.in(NoteEntity::getUserId, matchedUserIds);
+        }
+
+        // 收藏状态筛选
+        if (queryReq.getFavorited() != null) {
+            wrapper.eq(NoteEntity::getFavorited, queryReq.getFavorited());
+        }
+
+        // 关键词搜索
+        if (StringUtils.hasText(queryReq.getKeyword())) {
+            String keyword = queryReq.getKeyword();
+            wrapper.and(w -> w.like(NoteEntity::getTitle, keyword)
+                    .or()
+                    .like(NoteEntity::getContent, keyword));
+        }
+
+        wrapper.orderByDesc(NoteEntity::getUpdatedAt);
+
+        IPage<NoteEntity> page = new Page<>(queryReq.getPageNum(), queryReq.getPageSize());
+        IPage<NoteEntity> result = noteMapper.selectPage(page, wrapper);
+
+        // 批量解析用户名和分类名
+        Map<Long, String> usernameMap = batchGetUsernames(
+                result.getRecords().stream().map(NoteEntity::getUserId).collect(Collectors.toSet())
+        );
+        Map<Long, String> categoryNameMap = batchGetCategoryNames(
+                result.getRecords().stream().map(NoteEntity::getCategoryId)
+                        .filter(id -> id != null).collect(Collectors.toSet())
+        );
+
+        return PageResp.of(result, note -> {
+            AdminNoteInfoResp resp = new AdminNoteInfoResp();
+            resp.setId(note.getId());
+            resp.setUserId(note.getUserId());
+            resp.setUsername(usernameMap.getOrDefault(note.getUserId(), ""));
+            resp.setTitle(note.getTitle());
+            resp.setPreview(note.getPreview());
+            resp.setCategoryId(note.getCategoryId());
+            resp.setCategoryName(note.getCategoryId() != null ? categoryNameMap.get(note.getCategoryId()) : null);
+            resp.setTags(note.getTags());
+            resp.setFavorited(note.getFavorited());
+            resp.setCreatedAt(note.getCreatedAt());
+            resp.setUpdatedAt(note.getUpdatedAt());
+            return resp;
+        });
+    }
+
+    @Override
+    public AdminNoteDetailResp adminGetNoteDetail(Long id) {
+        NoteEntity note = noteMapper.selectById(id);
+        if (note == null) {
+            throw new BusinessException("笔记不存在");
+        }
+
+        AdminNoteDetailResp resp = new AdminNoteDetailResp();
+        resp.setId(note.getId());
+        resp.setUserId(note.getUserId());
+        resp.setUsername(getUsernameById(note.getUserId()));
+        resp.setTitle(note.getTitle());
+        resp.setContent(note.getContent());
+        resp.setPreview(note.getPreview());
+        resp.setCategoryId(note.getCategoryId());
+        resp.setTags(note.getTags());
+        resp.setFavorited(note.getFavorited());
+        resp.setCreatedAt(note.getCreatedAt());
+        resp.setUpdatedAt(note.getUpdatedAt());
+
+        // 解析分类名
+        if (note.getCategoryId() != null) {
+            NoteCategoryEntity category = noteCategoryMapper.selectById(note.getCategoryId());
+            if (category != null) {
+                resp.setCategoryName(category.getName());
+            }
+        }
+
+        return resp;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void adminDeleteNote(Long id) {
+        NoteEntity note = noteMapper.selectById(id);
+        if (note == null) {
+            throw new BusinessException("笔记不存在");
+        }
+        noteMapper.deleteById(id);
+        log.info("管理员删除笔记成功, noteId={}, userId={}", id, note.getUserId());
+    }
+
+    /**
+     * 批量获取用户名映射
+     */
+    private Map<Long, String> batchGetUsernames(java.util.Set<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) return Map.of();
+        List<UserEntity> users = userMapper.selectBatchIds(userIds);
+        return users.stream().collect(Collectors.toMap(UserEntity::getId, UserEntity::getUsername));
+    }
+
+    /**
+     * 批量获取分类名映射（不限定用户）
+     */
+    private Map<Long, String> batchGetCategoryNames(java.util.Set<Long> categoryIds) {
+        if (categoryIds == null || categoryIds.isEmpty()) return Map.of();
+        List<NoteCategoryEntity> categories = noteCategoryMapper.selectBatchIds(categoryIds);
+        return categories.stream().collect(Collectors.toMap(NoteCategoryEntity::getId, NoteCategoryEntity::getName));
+    }
+
+    /**
+     * 根据用户ID获取用户名
+     */
+    private String getUsernameById(Long userId) {
+        UserEntity user = userMapper.selectById(userId);
+        return user != null ? user.getUsername() : "";
     }
 }

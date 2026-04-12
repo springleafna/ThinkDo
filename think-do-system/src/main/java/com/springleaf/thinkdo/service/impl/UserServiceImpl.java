@@ -2,13 +2,19 @@ package com.springleaf.thinkdo.service.impl;
 
 import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.springleaf.thinkdo.common.PageResp;
 import com.springleaf.thinkdo.domain.entity.RoleEntity;
 import com.springleaf.thinkdo.domain.entity.UserEntity;
 import com.springleaf.thinkdo.domain.entity.UserRoleEntity;
+import com.springleaf.thinkdo.domain.request.AdminChangeUserRoleReq;
+import com.springleaf.thinkdo.domain.request.AdminUserQueryReq;
 import com.springleaf.thinkdo.domain.request.UserLoginReq;
 import com.springleaf.thinkdo.domain.request.UserRegisterReq;
 import com.springleaf.thinkdo.domain.request.UserUpdatePasswordReq;
+import com.springleaf.thinkdo.domain.response.AdminUserInfoResp;
 import com.springleaf.thinkdo.domain.response.UserInfoResp;
 import com.springleaf.thinkdo.enums.UserRoleEnum;
 import com.springleaf.thinkdo.exception.BusinessException;
@@ -21,6 +27,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 /**
  * 用户Service实现
@@ -156,5 +163,125 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserEntity> impleme
     @Override
     public UserInfoResp getUserInfo() {
         return null;
+    }
+
+    @Override
+    public PageResp<AdminUserInfoResp> adminListUsers(AdminUserQueryReq queryReq) {
+        LambdaQueryWrapper<UserEntity> wrapper = new LambdaQueryWrapper<>();
+
+        // 用户名模糊搜索
+        if (StringUtils.hasText(queryReq.getUsername())) {
+            wrapper.like(UserEntity::getUsername, queryReq.getUsername());
+        }
+
+        // 角色筛选：先查出符合角色的用户ID集合，再作为IN条件
+        if (StringUtils.hasText(queryReq.getRole())) {
+            RoleEntity role = roleMapper.selectOne(
+                    new LambdaQueryWrapper<RoleEntity>().eq(RoleEntity::getName, queryReq.getRole())
+            );
+            if (role == null) {
+                return PageResp.of(java.util.List.of(), 0L, queryReq.getPageNum(), queryReq.getPageSize());
+            }
+            java.util.List<UserRoleEntity> userRoles = userRoleMapper.selectList(
+                    new LambdaQueryWrapper<UserRoleEntity>().eq(UserRoleEntity::getRoleId, role.getId())
+            );
+            java.util.List<Long> userIds = userRoles.stream()
+                    .map(UserRoleEntity::getUserId)
+                    .collect(java.util.stream.Collectors.toList());
+            if (userIds.isEmpty()) {
+                return PageResp.of(java.util.List.of(), 0L, queryReq.getPageNum(), queryReq.getPageSize());
+            }
+            wrapper.in(UserEntity::getId, userIds);
+        }
+
+        wrapper.orderByDesc(UserEntity::getCreatedAt);
+
+        IPage<UserEntity> page = new Page<>(queryReq.getPageNum(), queryReq.getPageSize());
+        IPage<UserEntity> result = userMapper.selectPage(page, wrapper);
+
+        return PageResp.of(result, user -> {
+            AdminUserInfoResp resp = new AdminUserInfoResp();
+            resp.setId(user.getId());
+            resp.setUsername(user.getUsername());
+            resp.setCreatedAt(user.getCreatedAt());
+            resp.setUpdatedAt(user.getUpdatedAt());
+
+            String roleName = userRoleMapper.getUserRoleName(user.getId());
+            if (roleName != null) {
+                resp.setRole(roleName);
+                UserRoleEnum roleEnum = UserRoleEnum.fromValue(roleName);
+                resp.setRoleDescription(roleEnum != null ? roleEnum.getDescription() : roleName);
+            }
+            return resp;
+        });
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void adminChangeUserRole(AdminChangeUserRoleReq req) {
+        Long userId = req.getUserId();
+        String roleName = req.getRoleName();
+
+        // 校验角色名称
+        UserRoleEnum targetRole = UserRoleEnum.fromValue(roleName);
+        if (targetRole == null) {
+            throw new BusinessException("无效的角色名称: " + roleName);
+        }
+
+        // 校验用户存在
+        UserEntity user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException("用户不存在");
+        }
+
+        // 不能修改自己的角色
+        if (userId.equals(StpUtil.getLoginIdAsLong())) {
+            throw new BusinessException("不能修改自己的角色");
+        }
+
+        // 查找目标角色
+        RoleEntity role = roleMapper.selectOne(
+                new LambdaQueryWrapper<RoleEntity>().eq(RoleEntity::getName, roleName)
+        );
+        if (role == null) {
+            throw new BusinessException("系统角色不存在");
+        }
+
+        // 更新用户角色
+        UserRoleEntity userRole = userRoleMapper.selectOne(
+                new LambdaQueryWrapper<UserRoleEntity>().eq(UserRoleEntity::getUserId, userId)
+        );
+        if (userRole == null) {
+            throw new BusinessException("用户角色记录不存在");
+        }
+        userRole.setRoleId(role.getId());
+        userRoleMapper.updateById(userRole);
+
+        // 踢出该用户会话，使其重新登录生效
+        StpUtil.kickout(userId);
+
+        log.info("管理员修改用户角色成功, userId={}, newRole={}", userId, roleName);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void adminDeleteUser(Long userId) {
+        // 不能删除自己
+        if (userId.equals(StpUtil.getLoginIdAsLong())) {
+            throw new BusinessException("不能删除自己的账号");
+        }
+
+        UserEntity user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException("用户不存在");
+        }
+
+        // 软删除用户
+        userMapper.deleteById(userId);
+
+        // 踢出该用户所有会话
+        StpUtil.kickout(userId);
+
+        log.info("管理员删除用户成功, userId={}, username={}", userId, user.getUsername());
     }
 }

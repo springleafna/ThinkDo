@@ -1,12 +1,16 @@
 package com.springleaf.thinkdo.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.springleaf.thinkdo.common.PageResp;
 import com.springleaf.thinkdo.domain.entity.PlanEntity;
+import com.springleaf.thinkdo.domain.request.AdminPlanQueryReq;
 import com.springleaf.thinkdo.domain.request.AiCreatePlanReq;
 import com.springleaf.thinkdo.domain.request.CreatePlanReq;
 import com.springleaf.thinkdo.domain.request.CreateQuadrantPlanReq;
 import com.springleaf.thinkdo.domain.request.PlanQueryReq;
 import com.springleaf.thinkdo.domain.request.UpdatePlanReq;
+import com.springleaf.thinkdo.domain.response.AdminPlanDetailResp;
+import com.springleaf.thinkdo.domain.response.AdminPlanInfoResp;
 import com.springleaf.thinkdo.domain.response.PlanInfoResp;
 import com.springleaf.thinkdo.domain.response.PlanQuadrantResp;
 
@@ -82,4 +86,24 @@ public interface PlanService extends IService<PlanEntity> {
      * @return 四象限计划
      */
     PlanQuadrantResp getQuadrantPlans();
+
+    /**
+     * 管理员-分页查询所有计划
+     * @param queryReq 查询条件
+     * @return 分页计划列表
+     */
+    PageResp<AdminPlanInfoResp> adminListPlans(AdminPlanQueryReq queryReq);
+
+    /**
+     * 管理员-查看计划详情（含步骤）
+     * @param id 计划ID
+     * @return 计划详情
+     */
+    AdminPlanDetailResp adminGetPlanDetail(Long id);
+
+    /**
+     * 管理员-删除计划
+     * @param id 计划ID
+     */
+    void adminDeletePlan(Long id);
 }

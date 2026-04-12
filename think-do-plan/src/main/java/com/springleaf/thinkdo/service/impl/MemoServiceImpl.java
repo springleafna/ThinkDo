@@ -2,15 +2,22 @@ package com.springleaf.thinkdo.service.impl;
 
 import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.springleaf.thinkdo.common.PageResp;
 import com.springleaf.thinkdo.domain.entity.MemoEntity;
+import com.springleaf.thinkdo.domain.entity.UserEntity;
+import com.springleaf.thinkdo.domain.request.AdminMemoQueryReq;
 import com.springleaf.thinkdo.domain.request.CreateMemoReq;
 import com.springleaf.thinkdo.domain.request.MemoQueryReq;
 import com.springleaf.thinkdo.domain.request.UpdateMemoReq;
+import com.springleaf.thinkdo.domain.response.AdminMemoInfoResp;
 import com.springleaf.thinkdo.domain.response.MemoInfoResp;
 import com.springleaf.thinkdo.enums.BackgroundColorEnum;
 import com.springleaf.thinkdo.exception.BusinessException;
 import com.springleaf.thinkdo.mapper.MemoMapper;
+import com.springleaf.thinkdo.mapper.UserMapper;
 import com.springleaf.thinkdo.service.MemoService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,6 +27,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -31,6 +40,7 @@ import java.util.stream.Collectors;
 public class MemoServiceImpl extends ServiceImpl<MemoMapper, MemoEntity> implements MemoService {
 
     private final MemoMapper memoMapper;
+    private final UserMapper userMapper;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -231,5 +241,105 @@ public class MemoServiceImpl extends ServiceImpl<MemoMapper, MemoEntity> impleme
         MemoInfoResp resp = new MemoInfoResp();
         BeanUtils.copyProperties(memo, resp);
         return resp;
+    }
+
+    // ==================== 管理员方法 ====================
+
+    @Override
+    public PageResp<AdminMemoInfoResp> adminListMemos(AdminMemoQueryReq queryReq) {
+        LambdaQueryWrapper<MemoEntity> wrapper = new LambdaQueryWrapper<>();
+
+        if (queryReq.getUserId() != null) {
+            wrapper.eq(MemoEntity::getUserId, queryReq.getUserId());
+        }
+
+        // 用户名模糊搜索
+        if (StringUtils.hasText(queryReq.getUsername())) {
+            List<Long> matchedUserIds = userMapper.selectList(
+                    new LambdaQueryWrapper<UserEntity>().like(UserEntity::getUsername, queryReq.getUsername())
+            ).stream().map(UserEntity::getId).collect(Collectors.toList());
+            if (matchedUserIds.isEmpty()) {
+                return PageResp.of(List.of(), 0L, queryReq.getPageNum(), queryReq.getPageSize());
+            }
+            wrapper.in(MemoEntity::getUserId, matchedUserIds);
+        }
+
+        if (StringUtils.hasText(queryReq.getTag())) {
+            wrapper.eq(MemoEntity::getTag, queryReq.getTag());
+        }
+        if (queryReq.getPinned() != null) {
+            wrapper.eq(MemoEntity::getPinned, queryReq.getPinned());
+        }
+        if (StringUtils.hasText(queryReq.getKeyword())) {
+            String keyword = queryReq.getKeyword();
+            wrapper.and(w -> w.like(MemoEntity::getTitle, keyword)
+                    .or()
+                    .like(MemoEntity::getContent, keyword));
+        }
+
+        wrapper.orderByDesc(MemoEntity::getUpdatedAt);
+
+        IPage<MemoEntity> page = new Page<>(queryReq.getPageNum(), queryReq.getPageSize());
+        IPage<MemoEntity> result = memoMapper.selectPage(page, wrapper);
+
+        // 批量解析用户名
+        Map<Long, String> usernameMap = batchGetUsernames(
+                result.getRecords().stream().map(MemoEntity::getUserId).collect(Collectors.toSet())
+        );
+
+        return PageResp.of(result, memo -> {
+            AdminMemoInfoResp resp = new AdminMemoInfoResp();
+            resp.setId(memo.getId());
+            resp.setUserId(memo.getUserId());
+            resp.setUsername(usernameMap.getOrDefault(memo.getUserId(), ""));
+            resp.setTitle(memo.getTitle());
+            resp.setContent(memo.getContent());
+            resp.setTag(memo.getTag());
+            resp.setBackgroundColor(memo.getBackgroundColor());
+            resp.setPinned(memo.getPinned());
+            resp.setCreatedAt(memo.getCreatedAt());
+            resp.setUpdatedAt(memo.getUpdatedAt());
+            return resp;
+        });
+    }
+
+    @Override
+    public AdminMemoInfoResp adminGetMemoDetail(Long id) {
+        MemoEntity memo = memoMapper.selectById(id);
+        if (memo == null) {
+            throw new BusinessException("便签不存在");
+        }
+
+        UserEntity user = userMapper.selectById(memo.getUserId());
+
+        AdminMemoInfoResp resp = new AdminMemoInfoResp();
+        resp.setId(memo.getId());
+        resp.setUserId(memo.getUserId());
+        resp.setUsername(user != null ? user.getUsername() : "");
+        resp.setTitle(memo.getTitle());
+        resp.setContent(memo.getContent());
+        resp.setTag(memo.getTag());
+        resp.setBackgroundColor(memo.getBackgroundColor());
+        resp.setPinned(memo.getPinned());
+        resp.setCreatedAt(memo.getCreatedAt());
+        resp.setUpdatedAt(memo.getUpdatedAt());
+        return resp;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void adminDeleteMemo(Long id) {
+        MemoEntity memo = memoMapper.selectById(id);
+        if (memo == null) {
+            throw new BusinessException("便签不存在");
+        }
+        memoMapper.deleteById(id);
+        log.info("管理员删除便签成功, memoId={}, userId={}", id, memo.getUserId());
+    }
+
+    private Map<Long, String> batchGetUsernames(Set<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) return Map.of();
+        List<UserEntity> users = userMapper.selectBatchIds(userIds);
+        return users.stream().collect(Collectors.toMap(UserEntity::getId, UserEntity::getUsername));
     }
 }
