@@ -102,4 +102,19 @@ public class PlanInfoResp {
      * 更新时间
      */
     private LocalDateTime updatedAt;
+
+    /**
+     * 总步骤数
+     */
+    private Integer totalSteps;
+
+    /**
+     * 已完成步骤数
+     */
+    private Integer completedSteps;
+
+    /**
+     * 完成进度百分比（0-100）
+     */
+    private Integer progress;
 }

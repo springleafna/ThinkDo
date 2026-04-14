@@ -6,6 +6,7 @@ import com.springleaf.thinkdo.domain.request.KnowledgeBaseCreateReq;
 import com.springleaf.thinkdo.domain.request.KnowledgeBasePageReq;
 import com.springleaf.thinkdo.domain.request.KnowledgeBaseUpdateReq;
 import com.springleaf.thinkdo.domain.response.KnowledgeBaseResp;
+import com.springleaf.thinkdo.domain.response.KnowledgeStatisticsResp;
 import com.springleaf.thinkdo.service.KnowledgeBaseService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -61,5 +62,13 @@ public class KnowledgeBaseController {
     @GetMapping("/knowledge-base")
     public Result<IPage<KnowledgeBaseResp>> pageQuery(KnowledgeBasePageReq requestParam) {
         return Result.success(knowledgeBaseService.pageQuery(requestParam));
+    }
+
+    /**
+     * 获取知识库统计信息
+     */
+    @GetMapping("/knowledge-base/statistics")
+    public Result<KnowledgeStatisticsResp> getStatistics() {
+        return Result.success(knowledgeBaseService.getStatistics());
     }
 }

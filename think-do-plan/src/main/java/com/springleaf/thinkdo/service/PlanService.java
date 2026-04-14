@@ -88,6 +88,13 @@ public interface PlanService extends IService<PlanEntity> {
     PlanQuadrantResp getQuadrantPlans();
 
     /**
+     * 获取最近未完成的计划列表（用于Dashboard展示）
+     * 返回最近2条未完成的普通计划和四象限计划
+     * @return 计划列表
+     */
+    List<PlanInfoResp> getRecentPlans();
+
+    /**
      * 管理员-分页查询所有计划
      * @param queryReq 查询条件
      * @return 分页计划列表

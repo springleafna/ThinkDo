@@ -110,4 +110,13 @@ public class PlanController {
     public Result<PlanQuadrantResp> getQuadrantPlans() {
         return Result.success(planService.getQuadrantPlans());
     }
+
+    /**
+     * 获取最近未完成的计划列表（用于Dashboard展示）
+     * 返回最近2条未完成的普通计划和四象限计划
+     */
+    @GetMapping("/recent")
+    public Result<List<PlanInfoResp>> getRecentPlans() {
+        return Result.success(planService.getRecentPlans());
+    }
 }

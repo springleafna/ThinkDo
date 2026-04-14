@@ -675,11 +675,42 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, PlanEntity> impleme
     }
 
     /**
-     * 转换为响应对象
+     * 转换为响应对象（不含步骤信息）
      */
     private PlanInfoResp convertToResp(PlanEntity plan) {
         PlanInfoResp resp = new PlanInfoResp();
         BeanUtils.copyProperties(plan, resp);
+        return resp;
+    }
+
+    /**
+     * 转换为响应对象（含步骤信息）
+     */
+    private PlanInfoResp convertToRespWithSteps(PlanEntity plan) {
+        PlanInfoResp resp = new PlanInfoResp();
+        BeanUtils.copyProperties(plan, resp);
+
+        // 获取步骤信息并计算进度
+        LambdaQueryWrapper<PlanStepEntity> stepWrapper = new LambdaQueryWrapper<>();
+        stepWrapper.eq(PlanStepEntity::getPlanId, plan.getId());
+        List<PlanStepEntity> steps = planStepMapper.selectList(stepWrapper);
+
+        int totalSteps = steps.size();
+        long completedSteps = steps.stream()
+                .filter(step -> PlanStatusEnum.COMPLETED.getCode().equals(step.getStatus()))
+                .count();
+
+        resp.setTotalSteps(totalSteps);
+        resp.setCompletedSteps((int) completedSteps);
+
+        // 计算进度百分比
+        if (totalSteps == 0) {
+            // 如果没有步骤，根据计划状态设置进度
+            resp.setProgress(PlanStatusEnum.COMPLETED.getCode().equals(plan.getStatus()) ? 100 : 0);
+        } else {
+            resp.setProgress((int) ((completedSteps * 100) / totalSteps));
+        }
+
         return resp;
     }
 
@@ -720,6 +751,50 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, PlanEntity> impleme
         resp.setNotImportantNotUrgent(quadrantMap.getOrDefault(PlanQuadrantEnum.NOT_IMPORTANT_NOT_URGENT.getCode(), Collections.emptyList()));
 
         return resp;
+    }
+
+    @Override
+    public List<PlanInfoResp> getRecentPlans() {
+        Long userId = StpUtil.getLoginIdAsLong();
+
+        // 查询未完成的普通计划(type=0)和四象限计划(type=1)
+        LambdaQueryWrapper<PlanEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(PlanEntity::getUserId, userId)
+                .eq(PlanEntity::getStatus, PlanStatusEnum.NOT_STARTED.getCode())
+                .in(PlanEntity::getType, List.of(PlanTypeEnum.NORMAL.getCode(), PlanTypeEnum.QUADRANT.getCode()))
+                .orderByDesc(PlanEntity::getPriority)
+                .orderByDesc(PlanEntity::getCreatedAt)
+                .last("LIMIT 2");
+
+        List<PlanEntity> planList = planMapper.selectList(wrapper);
+
+        // 获取所有分类ID，用于查询分类名称
+        List<Long> categoryIds = planList.stream()
+                .map(PlanEntity::getCategoryId)
+                .filter(id -> id != null)
+                .distinct()
+                .collect(Collectors.toList());
+
+        Map<Long, String> categoryNameMap = Map.of();
+        if (!categoryIds.isEmpty()) {
+            LambdaQueryWrapper<PlanCategoryEntity> categoryWrapper = new LambdaQueryWrapper<>();
+            categoryWrapper.in(PlanCategoryEntity::getId, categoryIds)
+                    .select(PlanCategoryEntity::getId, PlanCategoryEntity::getName);
+            List<PlanCategoryEntity> categories = planCategoryMapper.selectList(categoryWrapper);
+            categoryNameMap = categories.stream()
+                    .collect(Collectors.toMap(PlanCategoryEntity::getId, PlanCategoryEntity::getName));
+        }
+
+        Map<Long, String> finalCategoryNameMap = categoryNameMap;
+        return planList.stream()
+                .map(plan -> {
+                    PlanInfoResp resp = convertToRespWithSteps(plan);
+                    if (plan.getCategoryId() != null) {
+                        resp.setCategoryName(finalCategoryNameMap.get(plan.getCategoryId()));
+                    }
+                    return resp;
+                })
+                .collect(Collectors.toList());
     }
 
     /**

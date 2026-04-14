@@ -15,6 +15,7 @@ import com.springleaf.thinkdo.domain.request.KnowledgeBaseCreateReq;
 import com.springleaf.thinkdo.domain.request.KnowledgeBasePageReq;
 import com.springleaf.thinkdo.domain.request.KnowledgeBaseUpdateReq;
 import com.springleaf.thinkdo.domain.response.KnowledgeBaseResp;
+import com.springleaf.thinkdo.domain.response.KnowledgeStatisticsResp;
 import com.springleaf.thinkdo.enums.IntentKind;
 import com.springleaf.thinkdo.enums.IntentLevel;
 import com.springleaf.thinkdo.enums.KnowledgeScopeEnum;
@@ -358,5 +359,48 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         UserRoleEnum role = UserContext.getCurrentUserRole();
         // 如果用户上下文中没有角色信息，默认返回false（普通用户）
         return role == UserRoleEnum.ADMIN;
+    }
+
+    @Override
+    public KnowledgeStatisticsResp getStatistics() {
+        Long currentUserId = UserContext.getCurrentUserId();
+        if (currentUserId == null) {
+            throw new BusinessException("用户ID为空");
+        }
+        boolean isAdmin = isAdmin();
+
+        // 构建查询条件
+        LambdaQueryWrapper<KnowledgeBaseEntity> kbWrapper = Wrappers.lambdaQuery(KnowledgeBaseEntity.class)
+                .eq(KnowledgeBaseEntity::getDeleted, 0);
+
+        // 权限过滤
+        if (!isAdmin) {
+            // 普通用户只能查看自己的用户知识库
+            kbWrapper.eq(KnowledgeBaseEntity::getScope, KnowledgeScopeEnum.USER)
+                    .eq(KnowledgeBaseEntity::getCreatedBy, currentUserId);
+        }
+
+        // 查询知识库列表
+        List<KnowledgeBaseEntity> knowledgeBases = knowledgeBaseMapper.selectList(kbWrapper);
+
+        // 获取知识库ID列表
+        List<Long> kbIds = knowledgeBases.stream()
+                .map(KnowledgeBaseEntity::getId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+
+        // 查询文档数量
+        int documentCount = 0;
+        if (!kbIds.isEmpty()) {
+            LambdaQueryWrapper<KnowledgeDocumentEntity> docWrapper = Wrappers.lambdaQuery(KnowledgeDocumentEntity.class)
+                    .in(KnowledgeDocumentEntity::getKbId, kbIds)
+                    .eq(KnowledgeDocumentEntity::getDeleted, 0);
+            documentCount = knowledgeDocumentMapper.selectCount(docWrapper).intValue();
+        }
+
+        return KnowledgeStatisticsResp.builder()
+                .baseCount(knowledgeBases.size())
+                .documentCount(documentCount)
+                .build();
     }
 }

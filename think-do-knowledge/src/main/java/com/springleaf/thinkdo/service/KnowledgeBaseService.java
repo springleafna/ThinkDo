@@ -5,6 +5,7 @@ import com.springleaf.thinkdo.domain.request.KnowledgeBaseCreateReq;
 import com.springleaf.thinkdo.domain.request.KnowledgeBasePageReq;
 import com.springleaf.thinkdo.domain.request.KnowledgeBaseUpdateReq;
 import com.springleaf.thinkdo.domain.response.KnowledgeBaseResp;
+import com.springleaf.thinkdo.domain.response.KnowledgeStatisticsResp;
 
 /**
  * 知识库服务接口
@@ -56,4 +57,11 @@ public interface KnowledgeBaseService {
      * @return 知识库分页结果
      */
     IPage<KnowledgeBaseResp> pageQuery(KnowledgeBasePageReq requestParam);
+
+    /**
+     * 获取当前用户的知识库统计信息
+     *
+     * @return 统计信息（知识库数量和文档数量）
+     */
+    KnowledgeStatisticsResp getStatistics();
 }
