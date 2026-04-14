@@ -24,7 +24,6 @@ import com.springleaf.thinkdo.mapper.UserMapper;
 import com.springleaf.thinkdo.service.NoteService;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
-import org.jsoup.safety.Safelist;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.prompt.PromptTemplate;
@@ -329,17 +328,9 @@ public class NoteServiceImpl extends ServiceImpl<NoteMapper, NoteEntity> impleme
         Map<String, Object> params = buildParams(req);
         Prompt prompt = template.create(params);
 
-        boolean isFormat = req.getAction() == AiActionEnum.FORMAT;
-
-        Flux<String> contentStream = chatClient.prompt(prompt)
+        return chatClient.prompt(prompt)
                 .stream()
                 .content();
-
-        // FORMAT 操作需要清理 HTML
-        if (isFormat) {
-            return contentStream.map(this::sanitizeHtml);
-        }
-        return contentStream;
     }
 
     /**
@@ -372,18 +363,6 @@ public class NoteServiceImpl extends ServiceImpl<NoteMapper, NoteEntity> impleme
     private Resource selectTemplate(AiActionEnum action) {
         String templatePath = NoteConstant.PROMPT_TEMPLATE_PREFIX + action.name().toLowerCase() + NoteConstant.PROMPT_TEMPLATE_SUFFIX;
         return resourceLoader.getResource(templatePath);
-    }
-
-    /**
-     * 清理HTML，只保留安全的标签和属性
-     */
-    private String sanitizeHtml(String html) {
-        Safelist safelist = new Safelist();
-        safelist.addTags(NoteConstant.SAFE_HTML_TAGS);
-        for (String[] attr : NoteConstant.SAFE_HTML_ATTRIBUTES) {
-            safelist.addAttributes(attr[0], attr[1]);
-        }
-        return Jsoup.clean(html, safelist);
     }
 
     /**

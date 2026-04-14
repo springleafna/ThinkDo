@@ -17,10 +17,5 @@ public enum AiActionEnum {
     /**
      * 纠错
      */
-    CORRECT,
-
-    /**
-     * 格式化
-     */
-    FORMAT
+    CORRECT
 }

@@ -23,21 +23,16 @@ public class AiStreamChunkResp {
     private Boolean done;
 
     /**
-     * 是否为HTML格式（仅done=true时有意义）
-     */
-    private Boolean isHtml;
-
-    /**
      * 创建数据块（包含增量内容）
      */
     public static AiStreamChunkResp data(String delta) {
-        return new AiStreamChunkResp(delta, false, null);
+        return new AiStreamChunkResp(delta, false);
     }
 
     /**
      * 创建结束块（表示流式输出完成）
      */
-    public static AiStreamChunkResp done(boolean isHtml) {
-        return new AiStreamChunkResp(null, true, isHtml);
+    public static AiStreamChunkResp done() {
+        return new AiStreamChunkResp(null, true);
     }
 }

@@ -101,14 +101,12 @@ public class NoteController {
 
     /**
      * AI文本转换（流式）
-     * action: polish(润色) | expand(扩写) | correct(纠错) | format(格式化)
+     * action: polish(润色) | expand(扩写) | correct(纠错)
      *
-     * 返回 text/event-stream，持续发送 {"delta":"..."}，最后发送 {"done":true,"isHtml":<bool>}
+     * 返回 text/event-stream，持续发送 {"delta":"..."}，最后发送 {"done":true}
      */
     @PostMapping(value = "/ai/transform/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<AiStreamChunkResp>> aiTransformStream(@RequestBody @Valid AiTransformReq req) {
-        boolean isHtml = req.getAction() == AiActionEnum.FORMAT;
-
         return noteService.aiTransformStream(req)
                 // 每个片段：发送数据块
                 .map(delta -> ServerSentEvent.<AiStreamChunkResp>builder()
@@ -116,7 +114,7 @@ public class NoteController {
                         .build())
                 // 流结束后：发送结束信号
                 .concatWith(Flux.just(ServerSentEvent.<AiStreamChunkResp>builder()
-                        .data(AiStreamChunkResp.done(isHtml))
+                        .data(AiStreamChunkResp.done())
                         .build()));
     }
 
