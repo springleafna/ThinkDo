@@ -94,13 +94,26 @@ public class MessageServiceImpl extends ServiceImpl<MessageMapper, MessageEntity
             );
 
             if (existing == null) {
-                String title = generateTitleFromQuestion(message.getContent());
                 ConversationEntity record = new ConversationEntity();
                 record.setConversationId(conversationId);
                 record.setUserId(userId);
-                record.setTitle(title);
+                record.setTitle("新对话");
                 record.setLastTime(LocalDateTime.now());
                 conversationMapper.insert(record);
+
+                // 异步生成会话标题，避免阻塞主流程
+                CompletableFuture.runAsync(() -> {
+                    try {
+                        String title = generateTitleFromQuestion(message.getContent());
+                        ConversationEntity update = new ConversationEntity();
+                        update.setConversationId(conversationId);
+                        update.setTitle(title);
+                        conversationMapper.updateById(update);
+                        log.info("异步生成会话标题成功, conversationId={}", conversationId);
+                    } catch (Exception ex) {
+                        log.warn("异步生成会话标题失败, conversationId={}", conversationId, ex);
+                    }
+                });
             }else {
                 existing.setLastTime(LocalDateTime.now());
                 conversationMapper.updateById(existing);

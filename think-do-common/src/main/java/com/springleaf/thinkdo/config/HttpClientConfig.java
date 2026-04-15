@@ -23,8 +23,8 @@ public class HttpClientConfig {
         return new OkHttpClient.Builder()
                 .connectTimeout(Duration.ofSeconds(30))
                 .writeTimeout(Duration.ofSeconds(60))
-                .readTimeout(Duration.ZERO)
-                .callTimeout(Duration.ZERO)
+                .readTimeout(Duration.ofSeconds(120))
+                .callTimeout(Duration.ofSeconds(180))
                 .retryOnConnectionFailure(true)
                 .build();
     }
