@@ -34,6 +34,11 @@ public enum SSEEventType {
     CANCEL("cancel"),
 
     /**
+     * 步骤进度事件（意图识别、向量检索等）
+     */
+    STEP("step"),
+
+    /**
      * 拒绝事件
      */
     REJECT("reject");

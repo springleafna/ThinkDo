@@ -30,6 +30,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 import static com.springleaf.thinkdo.constant.RAGConstant.CHAT_SYSTEM_PROMPT_PATH;
 import static com.springleaf.thinkdo.constant.RAGConstant.DEFAULT_TOP_K;
@@ -56,22 +57,39 @@ public class RagChatServiceImpl implements RagChatService {
         log.info("开始流式对话，会话ID：{}，任务ID：{}", actualConversationId, taskId);
         boolean thinkingEnabled = Boolean.TRUE.equals(deepThinking);
 
+        // 在请求线程中创建 callback，发送 meta 事件并获取 userId
         StreamCallback callback = callbackFactory.createChatEventHandler(emitter, actualConversationId, taskId);
         Long userId = StpUtil.getLoginIdAsLong();
-        
+
+        // 异步执行预处理，使 Controller 立即返回 SseEmitter，SSE 连接先建立
+        // 这样 step 事件才能实时推送到前端
+        CompletableFuture.runAsync(() -> {
+            try {
+                doStreamChat(question, actualConversationId, thinkingEnabled, callback, userId, taskId);
+            } catch (Exception e) {
+                log.error("流式对话异常, conversationId={}, taskId={}", actualConversationId, taskId, e);
+                callback.onError(e);
+            }
+        });
+    }
+
+    private void doStreamChat(String question, String conversationId, boolean thinkingEnabled,
+                              StreamCallback callback, Long userId, String taskId) {
         // 保存用户消息
-        messageService.append(actualConversationId, userId, new ChatMessage(ChatMessage.Role.USER, question));
-        
+        messageService.append(conversationId, userId, new ChatMessage(ChatMessage.Role.USER, question));
+
         // 加载历史消息
-        List<ChatMessage> history = messageService.load(actualConversationId, userId);
+        List<ChatMessage> history = messageService.load(conversationId, userId);
 
         // 确保用户意图树存在（domain和category级别节点）
         intentResolver.ensureUserIntentTreeExists(userId);
 
         // 问题拆分
+        callback.onStep("rewrite", "正在理解您的问题...");
         RewriteResult rewriteResult = queryRewriteService.rewriteWithSplit(question, history);
 
         // 获取每个子问题及其意图结果
+        callback.onStep("intent", "正在进行意图识别...");
         List<SubQuestionIntent> subIntents = intentResolver.resolve(rewriteResult, userId);
 
         // 如果全是SYSTEM类型的意图，则不走向量检索和MCP
@@ -90,6 +108,7 @@ public class RagChatServiceImpl implements RagChatService {
         }
 
         // 根据意图节点进行向量化检索
+        callback.onStep("retrieve", "正在检索相关知识...");
         RetrievalContext ctx = retrievalEngine.retrieve(subIntents, DEFAULT_TOP_K, userId);
         if (ctx.isEmpty()) {
             String emptyReply = "未检索到与问题相关的文档内容。";

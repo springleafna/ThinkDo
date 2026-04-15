@@ -8,6 +8,7 @@ import com.springleaf.thinkdo.config.AIModelProperties;
 import com.springleaf.thinkdo.domain.dto.CompletionPayload;
 import com.springleaf.thinkdo.domain.dto.MessageDelta;
 import com.springleaf.thinkdo.domain.dto.MetaPayload;
+import com.springleaf.thinkdo.domain.dto.StepPayload;
 import com.springleaf.thinkdo.domain.entity.ConversationEntity;
 import com.springleaf.thinkdo.enums.SSEEventType;
 import com.springleaf.thinkdo.http.SseEmitterSender;
@@ -141,6 +142,14 @@ public class StreamChatEventHandler implements StreamCallback {
         }
         taskManager.unregister(taskId);
         sender.fail(t);
+    }
+
+    @Override
+    public void onStep(String stepName, String message) {
+        if (taskManager.isCancelled(taskId)) {
+            return;
+        }
+        sender.sendEvent(SSEEventType.STEP.value(), new StepPayload(stepName, message));
     }
 
     private void sendChunked(String type, String content) {

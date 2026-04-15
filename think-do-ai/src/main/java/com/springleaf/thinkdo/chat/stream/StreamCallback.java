@@ -66,4 +66,18 @@ public interface StreamCallback {
      * @param error 异常对象，包含具体错误信息
      */
     void onError(Throwable error);
+
+    /**
+     * 接收预处理步骤进度通知
+     * <p>
+     * 在流式内容开始之前，通知前端当前正在执行的预处理步骤
+     * （如查询改写、意图识别、向量检索、MCP调用等）
+     * <p>
+     * 默认空实现，不需要步骤展示的场景可以忽略
+     *
+     * @param stepName 步骤标识（如 rewrite, intent, retrieve, mcp）
+     * @param message  步骤描述（如 "正在进行意图识别..."）
+     */
+    default void onStep(String stepName, String message) {
+    }
 }
