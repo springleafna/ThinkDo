@@ -4,6 +4,7 @@ import com.springleaf.thinkdo.common.Result;
 import com.springleaf.thinkdo.domain.request.UserLoginReq;
 import com.springleaf.thinkdo.domain.request.UserRegisterReq;
 import com.springleaf.thinkdo.domain.request.UserUpdatePasswordReq;
+import com.springleaf.thinkdo.domain.request.UserUpdateUsernameReq;
 import com.springleaf.thinkdo.domain.response.UserInfoResp;
 import com.springleaf.thinkdo.enums.UserRoleEnum;
 import com.springleaf.thinkdo.service.UserService;
@@ -60,6 +61,15 @@ public class UserController {
     @PutMapping("/updatePassword")
     public Result<Void> updatePassword(@RequestBody @Valid UserUpdatePasswordReq updatePasswordReq) {
         userService.updatePassword(updatePasswordReq);
+        return Result.success();
+    }
+
+    /**
+     * 用户修改用户名
+     */
+    @PutMapping("/updateUsername")
+    public Result<Void> updateUsername(@RequestBody @Valid UserUpdateUsernameReq updateUsernameReq) {
+        userService.updateUsername(updateUsernameReq);
         return Result.success();
     }
 

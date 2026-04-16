@@ -8,6 +8,7 @@ import com.springleaf.thinkdo.domain.request.AdminUserQueryReq;
 import com.springleaf.thinkdo.domain.request.UserLoginReq;
 import com.springleaf.thinkdo.domain.request.UserRegisterReq;
 import com.springleaf.thinkdo.domain.request.UserUpdatePasswordReq;
+import com.springleaf.thinkdo.domain.request.UserUpdateUsernameReq;
 import com.springleaf.thinkdo.domain.response.AdminUserInfoResp;
 import com.springleaf.thinkdo.domain.response.UserInfoResp;
 import com.springleaf.thinkdo.enums.UserRoleEnum;
@@ -41,6 +42,12 @@ public interface UserService extends IService<UserEntity> {
      * @param updatePasswordReq 旧密码+新密码+确认密码
      */
     void updatePassword(UserUpdatePasswordReq updatePasswordReq);
+
+    /**
+     * 用户修改用户名
+     * @param updateUsernameReq 新用户名+当前密码
+     */
+    void updateUsername(UserUpdateUsernameReq updateUsernameReq);
 
     /**
      * 获取用户个人信息

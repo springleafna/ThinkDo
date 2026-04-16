@@ -14,6 +14,7 @@ import com.springleaf.thinkdo.domain.request.AdminUserQueryReq;
 import com.springleaf.thinkdo.domain.request.UserLoginReq;
 import com.springleaf.thinkdo.domain.request.UserRegisterReq;
 import com.springleaf.thinkdo.domain.request.UserUpdatePasswordReq;
+import com.springleaf.thinkdo.domain.request.UserUpdateUsernameReq;
 import com.springleaf.thinkdo.domain.response.AdminUserInfoResp;
 import com.springleaf.thinkdo.domain.response.UserInfoResp;
 import com.springleaf.thinkdo.enums.UserRoleEnum;
@@ -158,6 +159,47 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserEntity> impleme
         StpUtil.kickout(userId);
 
         log.info("用户 {} 修改密码成功", user.getUsername());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void updateUsername(UserUpdateUsernameReq updateUsernameReq) {
+        long userId = StpUtil.getLoginIdAsLong();
+        String newUsername = updateUsernameReq.getNewUsername();
+        String password = updateUsernameReq.getPassword();
+
+        // 获取当前用户
+        UserEntity user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException("用户不存在");
+        }
+
+        // 验证当前密码
+        if (!PasswordUtil.verifyPassword(password, user.getPassword())) {
+            throw new BusinessException("当前密码输入错误");
+        }
+
+        // 新旧用户名不能相同
+        if (user.getUsername().equals(newUsername)) {
+            throw new BusinessException("新用户名与当前用户名相同");
+        }
+
+        // 检查新用户名是否已被占用
+        UserEntity existUser = userMapper.selectOne(
+                new LambdaQueryWrapper<UserEntity>().eq(UserEntity::getUsername, newUsername)
+        );
+        if (existUser != null) {
+            throw new BusinessException("该用户名已被占用");
+        }
+
+        // 更新用户名
+        user.setUsername(newUsername);
+        userMapper.updateById(user);
+
+        // 更新 Session 中的用户名
+        StpUtil.getSession().set("username", newUsername);
+
+        log.info("用户 {} 修改用户名成功，新用户名为 {}", user.getUsername(), newUsername);
     }
 
     @Override
