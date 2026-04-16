@@ -11,7 +11,6 @@ import com.springleaf.thinkdo.domain.request.UserUpdatePasswordReq;
 import com.springleaf.thinkdo.domain.response.AdminUserInfoResp;
 import com.springleaf.thinkdo.domain.response.UserInfoResp;
 import com.springleaf.thinkdo.enums.UserRoleEnum;
-import jakarta.validation.Valid;
 
 /**
  * 用户Service
@@ -67,4 +66,17 @@ public interface UserService extends IService<UserEntity> {
      * @param userId 用户ID
      */
     void adminDeleteUser(Long userId);
+
+    /**
+     * 统计用户总数
+     * @return 用户总数
+     */
+    Long countTotal();
+
+    /**
+     * 统计指定日期注册的用户数
+     * @param date 日期
+     * @return 用户数
+     */
+    Long countByDate(java.time.LocalDate date);
 }

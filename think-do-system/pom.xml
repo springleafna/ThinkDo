@@ -22,14 +22,6 @@
             <groupId>com.springleaf</groupId>
             <artifactId>think-do-common</artifactId>
         </dependency>
-        <dependency>
-            <groupId>com.springleaf</groupId>
-            <artifactId>think-do-framework</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.springleaf</groupId>
-            <artifactId>think-do-api</artifactId>
-        </dependency>
 
         <dependency>
             <groupId>com.baomidou</groupId>

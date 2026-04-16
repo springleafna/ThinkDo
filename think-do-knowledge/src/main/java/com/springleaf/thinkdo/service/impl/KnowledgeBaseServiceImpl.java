@@ -403,4 +403,21 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
                 .documentCount(documentCount)
                 .build();
     }
+
+    @Override
+    public Long countDocumentTotal() {
+        return knowledgeDocumentMapper.selectCount(
+                new LambdaQueryWrapper<KnowledgeDocumentEntity>().eq(KnowledgeDocumentEntity::getDeleted, 0)
+        );
+    }
+
+    @Override
+    public Long countDocumentByDate(java.time.LocalDate date) {
+        return knowledgeDocumentMapper.selectCount(
+                new LambdaQueryWrapper<KnowledgeDocumentEntity>()
+                        .eq(KnowledgeDocumentEntity::getDeleted, 0)
+                        .ge(KnowledgeDocumentEntity::getCreatedAt, date.atStartOfDay())
+                        .lt(KnowledgeDocumentEntity::getCreatedAt, date.plusDays(1).atStartOfDay())
+        );
+    }
 }

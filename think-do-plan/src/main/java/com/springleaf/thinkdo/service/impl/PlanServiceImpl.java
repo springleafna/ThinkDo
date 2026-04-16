@@ -979,4 +979,18 @@ public class PlanServiceImpl extends ServiceImpl<PlanMapper, PlanEntity> impleme
         List<PlanCategoryEntity> categories = planCategoryMapper.selectBatchIds(categoryIds);
         return categories.stream().collect(Collectors.toMap(PlanCategoryEntity::getId, PlanCategoryEntity::getName));
     }
+
+    @Override
+    public Long countTotal() {
+        return planMapper.selectCount(null);
+    }
+
+    @Override
+    public Long countByDate(java.time.LocalDate date) {
+        return planMapper.selectCount(
+                new LambdaQueryWrapper<PlanEntity>()
+                        .ge(PlanEntity::getCreatedAt, date.atStartOfDay())
+                        .lt(PlanEntity::getCreatedAt, date.plusDays(1).atStartOfDay())
+        );
+    }
 }

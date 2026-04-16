@@ -136,5 +136,5 @@ public class LocalFileStorageServiceImpl implements FileStorageService {
         if (idx < 0 || idx == filename.length() - 1) return "";
         return filename.substring(idx + 1).trim();
     }
-}
 
+}

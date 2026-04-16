@@ -342,4 +342,9 @@ public class MemoServiceImpl extends ServiceImpl<MemoMapper, MemoEntity> impleme
         List<UserEntity> users = userMapper.selectBatchIds(userIds);
         return users.stream().collect(Collectors.toMap(UserEntity::getId, UserEntity::getUsername));
     }
+
+    @Override
+    public Long countTotal() {
+        return memoMapper.selectCount(null);
+    }
 }

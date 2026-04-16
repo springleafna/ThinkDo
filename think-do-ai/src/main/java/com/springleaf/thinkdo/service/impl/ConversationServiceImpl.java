@@ -161,6 +161,23 @@ public class ConversationServiceImpl extends ServiceImpl<ConversationMapper, Con
         );
     }
 
+    @Override
+    public Long countTotal() {
+        return conversationMapper.selectCount(
+                new LambdaQueryWrapper<ConversationEntity>().eq(ConversationEntity::getDeleted, 0)
+        );
+    }
+
+    @Override
+    public Long countByDate(java.time.LocalDate date) {
+        return conversationMapper.selectCount(
+                new LambdaQueryWrapper<ConversationEntity>()
+                        .eq(ConversationEntity::getDeleted, 0)
+                        .ge(ConversationEntity::getCreatedAt, date.atStartOfDay())
+                        .lt(ConversationEntity::getCreatedAt, date.plusDays(1).atStartOfDay())
+        );
+    }
+
     /**
      * 转换为会话信息响应对象
      */

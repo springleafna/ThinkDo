@@ -284,4 +284,18 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserEntity> impleme
 
         log.info("管理员删除用户成功, userId={}, username={}", userId, user.getUsername());
     }
+
+    @Override
+    public Long countTotal() {
+        return userMapper.selectCount(null);
+    }
+
+    @Override
+    public Long countByDate(java.time.LocalDate date) {
+        return userMapper.selectCount(
+                new LambdaQueryWrapper<UserEntity>()
+                        .ge(UserEntity::getCreatedAt, date.atStartOfDay())
+                        .lt(UserEntity::getCreatedAt, date.plusDays(1).atStartOfDay())
+        );
+    }
 }

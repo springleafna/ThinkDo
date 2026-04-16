@@ -113,4 +113,17 @@ public interface PlanService extends IService<PlanEntity> {
      * @param id 计划ID
      */
     void adminDeletePlan(Long id);
+
+    /**
+     * 统计计划总数
+     * @return 计划总数
+     */
+    Long countTotal();
+
+    /**
+     * 统计指定日期创建的计划数
+     * @param date 日期
+     * @return 计划数
+     */
+    Long countByDate(java.time.LocalDate date);
 }

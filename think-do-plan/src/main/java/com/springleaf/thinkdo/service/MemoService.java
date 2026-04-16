@@ -81,4 +81,10 @@ public interface MemoService extends IService<MemoEntity> {
      * @param id 便签ID
      */
     void adminDeleteMemo(Long id);
+
+    /**
+     * 统计便签总数
+     * @return 便签总数
+     */
+    Long countTotal();
 }

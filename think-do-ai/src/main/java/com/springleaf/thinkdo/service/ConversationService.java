@@ -57,4 +57,17 @@ public interface ConversationService {
      * @return 对话信息，如果不存在则返回null
      */
     ConversationEntity findConversation(String conversationId, Long userId);
+
+    /**
+     * 统计会话总数
+     * @return 会话总数
+     */
+    Long countTotal();
+
+    /**
+     * 统计指定日期创建的会话数
+     * @param date 日期
+     * @return 会话数
+     */
+    Long countByDate(java.time.LocalDate date);
 }

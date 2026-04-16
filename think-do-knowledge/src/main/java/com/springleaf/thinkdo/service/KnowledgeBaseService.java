@@ -64,4 +64,17 @@ public interface KnowledgeBaseService {
      * @return 统计信息（知识库数量和文档数量）
      */
     KnowledgeStatisticsResp getStatistics();
+
+    /**
+     * 统计所有知识库文档总数
+     * @return 文档总数
+     */
+    Long countDocumentTotal();
+
+    /**
+     * 统计指定日期上传的文档数
+     * @param date 日期
+     * @return 文档数
+     */
+    Long countDocumentByDate(java.time.LocalDate date);
 }

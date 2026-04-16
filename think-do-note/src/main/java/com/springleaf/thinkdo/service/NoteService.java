@@ -125,4 +125,17 @@ public interface NoteService extends IService<NoteEntity> {
      * @param id 笔记ID
      */
     void adminDeleteNote(Long id);
+
+    /**
+     * 统计笔记总数
+     * @return 笔记总数
+     */
+    Long countTotal();
+
+    /**
+     * 统计指定日期创建的笔记数
+     * @param date 日期
+     * @return 笔记数
+     */
+    Long countByDate(java.time.LocalDate date);
 }

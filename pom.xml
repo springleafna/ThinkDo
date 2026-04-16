@@ -17,12 +17,8 @@
     </parent>
 
     <modules>
-        <!-- 公共模块：Result, Utils, Exception -->
+        <!-- 公共模块：Result, Utils, Exception, Config, Service -->
         <module>think-do-common</module>
-        <!-- 中间件及配置模块：Sa-token, MyBatisPlus, Redis配置 -->
-        <module>think-do-framework</module>
-        <!-- 交互契约模块：DTO, Feign Client (模块间通信专用，防循环依赖) -->
-        <module>think-do-api</module>
         <!-- 系统模块：用户、权限、认证、系统配置 -->
         <module>think-do-system</module>
         <!-- AI模块：LLM对接、Prompt管理、MCP工具 -->
@@ -33,6 +29,8 @@
         <module>think-do-knowledge</module>
         <!-- 计划模块：待办、四象限 -->
         <module>think-do-plan</module>
+        <!-- 管理员模块：管理员后台接口 -->
+        <module>think-do-admin</module>
         <!-- 启动器模块：SpringBoot启动类 -->
         <module>think-do-start</module>
         <!-- MCP模块：MCP服务 -->
@@ -75,16 +73,6 @@
             </dependency>
             <dependency>
                 <groupId>com.springleaf</groupId>
-                <artifactId>think-do-framework</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.springleaf</groupId>
-                <artifactId>think-do-api</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.springleaf</groupId>
                 <artifactId>think-do-system</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -106,6 +94,11 @@
             <dependency>
                 <groupId>com.springleaf</groupId>
                 <artifactId>think-do-plan</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.springleaf</groupId>
+                <artifactId>think-do-admin</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

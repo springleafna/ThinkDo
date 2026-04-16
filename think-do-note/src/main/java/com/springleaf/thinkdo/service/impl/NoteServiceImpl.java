@@ -610,4 +610,18 @@ public class NoteServiceImpl extends ServiceImpl<NoteMapper, NoteEntity> impleme
         UserEntity user = userMapper.selectById(userId);
         return user != null ? user.getUsername() : "";
     }
+
+    @Override
+    public Long countTotal() {
+        return noteMapper.selectCount(null);
+    }
+
+    @Override
+    public Long countByDate(java.time.LocalDate date) {
+        return noteMapper.selectCount(
+                new LambdaQueryWrapper<NoteEntity>()
+                        .ge(NoteEntity::getCreatedAt, date.atStartOfDay())
+                        .lt(NoteEntity::getCreatedAt, date.plusDays(1).atStartOfDay())
+        );
+    }
 }
