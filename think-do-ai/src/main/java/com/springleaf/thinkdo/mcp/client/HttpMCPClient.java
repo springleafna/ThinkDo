@@ -108,6 +108,7 @@ public class HttpMCPClient implements MCPClient {
 
         Request request = new Request.Builder()
                 .url(url)
+                .header("Accept", "application/json, text/event-stream")
                 .post(RequestBody.create(requestBody, JSON))
                 .build();
 
@@ -153,6 +154,7 @@ public class HttpMCPClient implements MCPClient {
 
         Request request = new Request.Builder()
                 .url(url)
+                .header("Accept", "application/json, text/event-stream")
                 .post(RequestBody.create(body, JSON))
                 .build();
 
@@ -167,6 +169,14 @@ public class HttpMCPClient implements MCPClient {
     }
 
     private String resolveMcpEndpointUrl() {
+        // URL 路径部分已包含 /mcp（可能后面跟 query string）
+        try {
+            String path = new java.net.URL(serverUrl).getPath();
+            if (path.endsWith("/mcp")) {
+                return serverUrl;
+            }
+        } catch (Exception ignored) {
+        }
         return serverUrl.endsWith("/mcp") ? serverUrl : serverUrl + "/mcp";
     }
 

@@ -111,7 +111,7 @@ public class RagChatServiceImpl implements RagChatService {
         callback.onStep("retrieve", "正在检索相关知识...");
         RetrievalContext ctx = retrievalEngine.retrieve(subIntents, DEFAULT_TOP_K, userId);
         if (ctx.isEmpty()) {
-            String emptyReply = "未检索到与问题相关的文档内容。";
+            String emptyReply = "未检索到与问题相关的内容。";
             callback.onContent(emptyReply);
             callback.onComplete();
             return;
