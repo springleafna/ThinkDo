@@ -4,6 +4,7 @@ import com.springleaf.thinkdo.common.PageResp;
 import com.springleaf.thinkdo.common.Result;
 import com.springleaf.thinkdo.context.UserContext;
 import com.springleaf.thinkdo.domain.request.AdminChangeUserRoleReq;
+import com.springleaf.thinkdo.domain.request.AdminResetPasswordReq;
 import com.springleaf.thinkdo.domain.request.AdminUserQueryReq;
 import com.springleaf.thinkdo.domain.response.AdminUserInfoResp;
 import com.springleaf.thinkdo.enums.ResultCodeEnum;
@@ -49,6 +50,16 @@ public class AdminUserController {
     public Result<Void> deleteUser(@PathVariable Long id) {
         checkAdmin();
         userService.adminDeleteUser(id);
+        return Result.success();
+    }
+
+    /**
+     * 重置用户密码
+     */
+    @PutMapping("/resetPassword")
+    public Result<Void> resetPassword(@RequestBody @Valid AdminResetPasswordReq req) {
+        checkAdmin();
+        userService.adminResetPassword(req.getUserId(), req.getNewPassword());
         return Result.success();
     }
 

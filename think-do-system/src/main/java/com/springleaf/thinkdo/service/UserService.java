@@ -75,6 +75,13 @@ public interface UserService extends IService<UserEntity> {
     void adminDeleteUser(Long userId);
 
     /**
+     * 管理员-重置用户密码
+     * @param userId 用户ID
+     * @param newPassword 新密码
+     */
+    void adminResetPassword(Long userId, String newPassword);
+
+    /**
      * 统计用户总数
      * @return 用户总数
      */

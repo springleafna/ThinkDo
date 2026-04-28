@@ -328,6 +328,29 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserEntity> impleme
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void adminResetPassword(Long userId, String newPassword) {
+        // 不能重置自己的密码
+        if (userId.equals(StpUtil.getLoginIdAsLong())) {
+            throw new BusinessException("不能重置自己的密码");
+        }
+
+        UserEntity user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException("用户不存在");
+        }
+
+        // 更新密码
+        user.setPassword(PasswordUtil.encryptPassword(newPassword));
+        userMapper.updateById(user);
+
+        // 踢出该用户所有会话，强制重新登录
+        StpUtil.kickout(userId);
+
+        log.info("管理员重置用户密码成功, userId={}, username={}", userId, user.getUsername());
+    }
+
+    @Override
     public Long countTotal() {
         return userMapper.selectCount(null);
     }
