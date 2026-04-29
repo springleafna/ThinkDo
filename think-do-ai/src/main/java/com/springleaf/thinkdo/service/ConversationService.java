@@ -1,9 +1,13 @@
 package com.springleaf.thinkdo.service;
 
+import com.springleaf.thinkdo.common.PageResp;
 import com.springleaf.thinkdo.domain.entity.ConversationEntity;
-import com.springleaf.thinkdo.domain.response.ConversationInfoResp;
+import com.springleaf.thinkdo.domain.request.AdminConversationQueryReq;
 import com.springleaf.thinkdo.domain.request.CreateConversationReq;
 import com.springleaf.thinkdo.domain.request.UpdateConversationReq;
+import com.springleaf.thinkdo.domain.response.AdminConversationDetailResp;
+import com.springleaf.thinkdo.domain.response.AdminConversationInfoResp;
+import com.springleaf.thinkdo.domain.response.ConversationInfoResp;
 
 import java.util.List;
 
@@ -70,4 +74,26 @@ public interface ConversationService {
      * @return 会话数
      */
     Long countByDate(java.time.LocalDate date);
+
+    // ==================== 管理员接口 ====================
+
+    /**
+     * 管理员-分页查询会话列表
+     */
+    PageResp<AdminConversationInfoResp> adminListConversations(AdminConversationQueryReq queryReq);
+
+    /**
+     * 管理员-获取会话详情（含消息记录）
+     */
+    AdminConversationDetailResp adminGetConversationDetail(String conversationId);
+
+    /**
+     * 管理员-删除会话
+     */
+    void adminDeleteConversation(String conversationId);
+
+    /**
+     * 管理员-批量删除会话
+     */
+    void adminBatchDeleteConversations(List<String> conversationIds);
 }

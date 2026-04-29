@@ -2,8 +2,11 @@ package com.springleaf.thinkdo.service;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.springleaf.thinkdo.common.PageResp;
+import com.springleaf.thinkdo.domain.request.AdminKnowledgeDocumentQueryReq;
 import com.springleaf.thinkdo.domain.request.KnowledgeDocumentUpdateReq;
 import com.springleaf.thinkdo.domain.request.KnowledgeDocumentUploadReq;
+import com.springleaf.thinkdo.domain.response.AdminKnowledgeDocumentInfoResp;
 import com.springleaf.thinkdo.domain.response.KnowledgeChunkResp;
 import com.springleaf.thinkdo.domain.response.KnowledgeDocumentChunkLogResp;
 import com.springleaf.thinkdo.domain.response.KnowledgeDocumentResp;
@@ -100,4 +103,26 @@ public interface KnowledgeDocumentService {
      * @return 分块列表（按 chunkIndex 升序）
      */
     List<KnowledgeChunkResp> getChunks(String docId);
+
+    // ==================== 管理员接口 ====================
+
+    /**
+     * 管理员-分页查询所有文档（支持跨知识库）
+     */
+    PageResp<AdminKnowledgeDocumentInfoResp> adminListDocuments(AdminKnowledgeDocumentQueryReq queryReq);
+
+    /**
+     * 管理员-获取文档详情
+     */
+    KnowledgeDocumentResp adminGetDocumentDetail(String docId);
+
+    /**
+     * 管理员-删除文档
+     */
+    void adminDeleteDocument(String docId);
+
+    /**
+     * 管理员-启用/禁用文档
+     */
+    void adminEnableDocument(String docId, boolean enabled);
 }

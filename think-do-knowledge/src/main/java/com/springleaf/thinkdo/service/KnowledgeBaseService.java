@@ -1,9 +1,12 @@
 package com.springleaf.thinkdo.service;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.springleaf.thinkdo.common.PageResp;
+import com.springleaf.thinkdo.domain.request.AdminKnowledgeBaseQueryReq;
 import com.springleaf.thinkdo.domain.request.KnowledgeBaseCreateReq;
 import com.springleaf.thinkdo.domain.request.KnowledgeBasePageReq;
 import com.springleaf.thinkdo.domain.request.KnowledgeBaseUpdateReq;
+import com.springleaf.thinkdo.domain.response.AdminKnowledgeBaseInfoResp;
 import com.springleaf.thinkdo.domain.response.KnowledgeBaseResp;
 import com.springleaf.thinkdo.domain.response.KnowledgeStatisticsResp;
 
@@ -77,4 +80,21 @@ public interface KnowledgeBaseService {
      * @return 文档数
      */
     Long countDocumentByDate(java.time.LocalDate date);
+
+    // ==================== 管理员接口 ====================
+
+    /**
+     * 管理员-分页查询所有知识库
+     */
+    PageResp<AdminKnowledgeBaseInfoResp> adminListKnowledgeBases(AdminKnowledgeBaseQueryReq queryReq);
+
+    /**
+     * 管理员-获取知识库详情
+     */
+    AdminKnowledgeBaseInfoResp adminGetKnowledgeBaseDetail(String kbId);
+
+    /**
+     * 管理员-删除知识库（级联删除文档、分块、意图节点）
+     */
+    void adminDeleteKnowledgeBase(String kbId);
 }

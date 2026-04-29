@@ -6,14 +6,18 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.springleaf.thinkdo.common.PageResp;
 import com.springleaf.thinkdo.constant.KnowledgeBaseConstant;
 import com.springleaf.thinkdo.context.UserContext;
 import com.springleaf.thinkdo.domain.entity.IntentNodeEntity;
 import com.springleaf.thinkdo.domain.entity.KnowledgeBaseEntity;
 import com.springleaf.thinkdo.domain.entity.KnowledgeDocumentEntity;
+import com.springleaf.thinkdo.domain.entity.UserEntity;
+import com.springleaf.thinkdo.domain.request.AdminKnowledgeBaseQueryReq;
 import com.springleaf.thinkdo.domain.request.KnowledgeBaseCreateReq;
 import com.springleaf.thinkdo.domain.request.KnowledgeBasePageReq;
 import com.springleaf.thinkdo.domain.request.KnowledgeBaseUpdateReq;
+import com.springleaf.thinkdo.domain.response.AdminKnowledgeBaseInfoResp;
 import com.springleaf.thinkdo.domain.response.KnowledgeBaseResp;
 import com.springleaf.thinkdo.domain.response.KnowledgeStatisticsResp;
 import com.springleaf.thinkdo.enums.IntentKind;
@@ -24,6 +28,7 @@ import com.springleaf.thinkdo.exception.BusinessException;
 import com.springleaf.thinkdo.mapper.IntentNodeMapper;
 import com.springleaf.thinkdo.mapper.KnowledgeBaseMapper;
 import com.springleaf.thinkdo.mapper.KnowledgeDocumentMapper;
+import com.springleaf.thinkdo.mapper.UserMapper;
 import com.springleaf.thinkdo.intent.IntentResolver;
 import com.springleaf.thinkdo.intent.IntentTreeCacheManager;
 import com.springleaf.thinkdo.service.KnowledgeBaseService;
@@ -56,6 +61,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     private final IntentNodeMapper intentNodeMapper;
     private final IntentResolver intentResolver;
     private final IntentTreeCacheManager intentTreeCacheManager;
+    private final UserMapper userMapper;
 
     @Transactional
     @Override
@@ -419,5 +425,139 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
                         .ge(KnowledgeDocumentEntity::getCreatedAt, date.atStartOfDay())
                         .lt(KnowledgeDocumentEntity::getCreatedAt, date.plusDays(1).atStartOfDay())
         );
+    }
+
+    // ==================== 管理员接口实现 ====================
+
+    @Override
+    public PageResp<AdminKnowledgeBaseInfoResp> adminListKnowledgeBases(AdminKnowledgeBaseQueryReq queryReq) {
+        LambdaQueryWrapper<KnowledgeBaseEntity> wrapper = new LambdaQueryWrapper<>();
+
+        // 关键词搜索
+        if (StringUtils.hasText(queryReq.getKeyword())) {
+            wrapper.like(KnowledgeBaseEntity::getName, queryReq.getKeyword());
+        }
+
+        // 作用域筛选
+        if (StringUtils.hasText(queryReq.getScope())) {
+            wrapper.eq(KnowledgeBaseEntity::getScope, KnowledgeScopeEnum.valueOf(queryReq.getScope()));
+        }
+
+        // 创建人用户名搜索
+        if (StringUtils.hasText(queryReq.getUsername())) {
+            List<Long> matchedUserIds = userMapper.selectList(
+                    new LambdaQueryWrapper<UserEntity>().like(UserEntity::getUsername, queryReq.getUsername())
+            ).stream().map(UserEntity::getId).collect(Collectors.toList());
+            if (matchedUserIds.isEmpty()) {
+                return PageResp.of(List.of(), 0L, queryReq.getPageNum(), queryReq.getPageSize());
+            }
+            wrapper.in(KnowledgeBaseEntity::getCreatedBy, matchedUserIds);
+        }
+
+        wrapper.eq(KnowledgeBaseEntity::getDeleted, 0)
+                .orderByDesc(KnowledgeBaseEntity::getUpdatedAt);
+
+        Page<KnowledgeBaseEntity> page = knowledgeBaseMapper.selectPage(
+                new Page<>(queryReq.getPageNum(), queryReq.getPageSize()), wrapper
+        );
+
+        // 批量获取文档数量
+        Map<Long, Long> docCountMap = batchGetDocCounts(
+                page.getRecords().stream().map(KnowledgeBaseEntity::getId).collect(Collectors.toSet())
+        );
+
+        // 批量获取用户名
+        Map<Long, String> usernameMap = batchGetUsernames(
+                page.getRecords().stream().map(KnowledgeBaseEntity::getCreatedBy).collect(Collectors.toSet())
+        );
+
+        return PageResp.of(page, entity -> {
+            AdminKnowledgeBaseInfoResp resp = new AdminKnowledgeBaseInfoResp();
+            BeanUtil.copyProperties(entity, resp);
+            resp.setId(String.valueOf(entity.getId()));
+            resp.setDocumentCount(docCountMap.getOrDefault(entity.getId(), 0L));
+            resp.setUsername(usernameMap.getOrDefault(entity.getCreatedBy(), ""));
+            return resp;
+        });
+    }
+
+    @Override
+    public AdminKnowledgeBaseInfoResp adminGetKnowledgeBaseDetail(String kbId) {
+        KnowledgeBaseEntity kb = knowledgeBaseMapper.selectById(kbId);
+        if (kb == null) {
+            throw new BusinessException("知识库不存在");
+        }
+
+        Long docCount = knowledgeDocumentMapper.selectCount(
+                new LambdaQueryWrapper<KnowledgeDocumentEntity>()
+                        .eq(KnowledgeDocumentEntity::getKbId, kbId)
+                        .eq(KnowledgeDocumentEntity::getDeleted, 0)
+        );
+
+        UserEntity user = kb.getCreatedBy() != null ? userMapper.selectById(kb.getCreatedBy()) : null;
+
+        AdminKnowledgeBaseInfoResp resp = new AdminKnowledgeBaseInfoResp();
+        BeanUtil.copyProperties(kb, resp);
+        resp.setId(String.valueOf(kb.getId()));
+        resp.setDocumentCount(docCount);
+        resp.setUsername(user != null ? user.getUsername() : "");
+        return resp;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void adminDeleteKnowledgeBase(String kbId) {
+        KnowledgeBaseEntity kb = knowledgeBaseMapper.selectById(kbId);
+        if (kb == null) {
+            throw new BusinessException("知识库不存在");
+        }
+
+        // 删除关联文档
+        List<KnowledgeDocumentEntity> docs = knowledgeDocumentMapper.selectList(
+                new LambdaQueryWrapper<KnowledgeDocumentEntity>()
+                        .eq(KnowledgeDocumentEntity::getKbId, kbId)
+        );
+        for (KnowledgeDocumentEntity doc : docs) {
+            knowledgeDocumentMapper.deleteById(doc.getId());
+        }
+
+        // 删除关联意图节点
+        intentNodeMapper.delete(
+                new LambdaQueryWrapper<IntentNodeEntity>()
+                        .eq(IntentNodeEntity::getKbId, kbId)
+        );
+
+        // 删除知识库
+        knowledgeBaseMapper.deleteById(kbId);
+        intentTreeCacheManager.invalidateByScope(IntentKind.KB.getCode(), kb.getScope().getValue(), kb.getCreatedBy());
+        log.info("管理员删除知识库成功, kbId={}", kbId);
+    }
+
+    private Map<Long, String> batchGetUsernames(java.util.Set<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) return Map.of();
+        List<UserEntity> users = userMapper.selectBatchIds(userIds);
+        return users.stream().collect(Collectors.toMap(UserEntity::getId, UserEntity::getUsername));
+    }
+
+    private Map<Long, Long> batchGetDocCounts(java.util.Set<Long> kbIds) {
+        if (kbIds == null || kbIds.isEmpty()) return Map.of();
+        List<Map<String, Object>> rows = knowledgeDocumentMapper.selectMaps(
+                Wrappers.query(KnowledgeDocumentEntity.class)
+                        .select("kb_id AS kbId", "COUNT(1) AS docCount")
+                        .in("kb_id", kbIds)
+                        .eq("deleted", 0)
+                        .groupBy("kb_id")
+        );
+        Map<Long, Long> result = new HashMap<>();
+        for (Map<String, Object> row : rows) {
+            Object kbIdValue = row.get("kbId");
+            Object countValue = row.get("docCount");
+            if (kbIdValue != null) {
+                Long kbId = kbIdValue instanceof Number ? ((Number) kbIdValue).longValue() : Long.parseLong(kbIdValue.toString());
+                Long count = countValue instanceof Number ? ((Number) countValue).longValue() : 0L;
+                result.put(kbId, count);
+            }
+        }
+        return result;
     }
 }

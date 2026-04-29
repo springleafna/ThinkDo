@@ -5,6 +5,7 @@ import cn.hutool.core.bean.BeanUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.springleaf.thinkdo.common.PageResp;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.springleaf.thinkdo.constant.KnowledgeBaseConstant;
 import com.springleaf.thinkdo.document.chunk.*;
@@ -15,9 +16,12 @@ import com.springleaf.thinkdo.domain.entity.KnowledgeBaseEntity;
 import com.springleaf.thinkdo.domain.entity.KnowledgeDocumentChunkLogEntity;
 import com.springleaf.thinkdo.domain.entity.KnowledgeDocumentEntity;
 import com.springleaf.thinkdo.domain.entity.KnowledgeChunkEntity;
+import com.springleaf.thinkdo.domain.entity.UserEntity;
+import com.springleaf.thinkdo.domain.request.AdminKnowledgeDocumentQueryReq;
 import com.springleaf.thinkdo.domain.request.KnowledgeChunkCreateRequest;
 import com.springleaf.thinkdo.domain.request.KnowledgeDocumentUpdateReq;
 import com.springleaf.thinkdo.domain.request.KnowledgeDocumentUploadReq;
+import com.springleaf.thinkdo.domain.response.AdminKnowledgeDocumentInfoResp;
 import com.springleaf.thinkdo.domain.response.KnowledgeChunkResp;
 import com.springleaf.thinkdo.domain.response.KnowledgeDocumentChunkLogResp;
 import com.springleaf.thinkdo.domain.response.KnowledgeDocumentResp;
@@ -30,6 +34,7 @@ import com.springleaf.thinkdo.mapper.KnowledgeBaseMapper;
 import com.springleaf.thinkdo.mapper.KnowledgeDocumentChunkLogMapper;
 import com.springleaf.thinkdo.mapper.KnowledgeDocumentMapper;
 import com.springleaf.thinkdo.mapper.KnowledgeChunkMapper;
+import com.springleaf.thinkdo.mapper.UserMapper;
 import com.springleaf.thinkdo.service.FileStorageService;
 import com.springleaf.thinkdo.service.KnowledgeChunkService;
 import com.springleaf.thinkdo.service.KnowledgeDocumentService;
@@ -53,6 +58,7 @@ import java.io.InputStream;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.Executor;
+import java.util.stream.Collectors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 
@@ -63,6 +69,7 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
 
     private final KnowledgeBaseMapper kbMapper;
     private final KnowledgeDocumentMapper docMapper;
+    private final UserMapper userMapper;
     private final FileStorageService fileStorageService;
     private final HttpClientHelper httpClientHelper;
     private final RedissonClient redissonClient;
@@ -697,6 +704,92 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
         HttpClientHelper.HttpFetchResponse response = httpClientHelper.get(sourceLocation, Map.of());
         String fileName = StringUtils.hasText(response.fileName()) ? response.fileName() : "remote-file";
         return fileStorageService.upload(bucketName, response.body(), fileName, response.contentType(), pathPrefix);
+    }
+
+    // ==================== 管理员接口实现 ====================
+
+    @Override
+    public PageResp<AdminKnowledgeDocumentInfoResp> adminListDocuments(AdminKnowledgeDocumentQueryReq queryReq) {
+        LambdaQueryWrapper<KnowledgeDocumentEntity> wrapper = new LambdaQueryWrapper<>();
+
+        // 知识库ID筛选
+        if (queryReq.getKbId() != null) {
+            wrapper.eq(KnowledgeDocumentEntity::getKbId, queryReq.getKbId());
+        }
+
+        // 关键词搜索
+        if (StringUtils.hasText(queryReq.getKeyword())) {
+            wrapper.like(KnowledgeDocumentEntity::getDocName, queryReq.getKeyword());
+        }
+
+        // 状态筛选
+        if (StringUtils.hasText(queryReq.getStatus())) {
+            wrapper.eq(KnowledgeDocumentEntity::getStatus, queryReq.getStatus());
+        }
+
+        wrapper.eq(KnowledgeDocumentEntity::getDeleted, 0)
+                .orderByDesc(KnowledgeDocumentEntity::getCreatedAt);
+
+        Page<KnowledgeDocumentEntity> page = docMapper.selectPage(
+                new Page<>(queryReq.getPageNum(), queryReq.getPageSize()), wrapper
+        );
+
+        // 批量获取知识库名称
+        Set<Long> kbIds = page.getRecords().stream()
+                .map(KnowledgeDocumentEntity::getKbId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, String> kbNameMap = Map.of();
+        if (!kbIds.isEmpty()) {
+            kbNameMap = kbMapper.selectBatchIds(kbIds).stream()
+                    .collect(Collectors.toMap(KnowledgeBaseEntity::getId, KnowledgeBaseEntity::getName));
+        }
+
+        // 批量获取用户名
+        Set<Long> userIds = page.getRecords().stream()
+                .map(KnowledgeDocumentEntity::getCreatedBy)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, String> usernameMap = Map.of();
+        if (!userIds.isEmpty()) {
+            usernameMap = userMapper.selectBatchIds(userIds).stream()
+                    .collect(Collectors.toMap(UserEntity::getId, UserEntity::getUsername));
+        }
+
+        Map<Long, String> finalKbNameMap = kbNameMap;
+        Map<Long, String> finalUsernameMap = usernameMap;
+
+        return PageResp.of(page, entity -> {
+            AdminKnowledgeDocumentInfoResp resp = new AdminKnowledgeDocumentInfoResp();
+            BeanUtil.copyProperties(entity, resp);
+            resp.setId(String.valueOf(entity.getId()));
+            resp.setKbId(String.valueOf(entity.getKbId()));
+            resp.setEnabled(entity.getEnabled() != null && entity.getEnabled() == 1);
+            resp.setKbName(finalKbNameMap.getOrDefault(entity.getKbId(), ""));
+            resp.setUsername(finalUsernameMap.getOrDefault(entity.getCreatedBy(), ""));
+            return resp;
+        });
+    }
+
+    @Override
+    public KnowledgeDocumentResp adminGetDocumentDetail(String docId) {
+        return get(docId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void adminDeleteDocument(String docId) {
+        KnowledgeDocumentEntity doc = docMapper.selectById(docId);
+        if (doc == null) {
+            throw new BusinessException("文档不存在");
+        }
+        docMapper.deleteById(doc);
+        log.info("管理员删除文档成功, docId={}", docId);
+    }
+
+    @Override
+    public void adminEnableDocument(String docId, boolean enabled) {
+        enable(docId, enabled);
     }
 
 }
