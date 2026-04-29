@@ -1,10 +1,7 @@
 package com.springleaf.thinkdo.prompt;
 
 import cn.hutool.core.util.StrUtil;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.core.io.Resource;
-import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -19,10 +16,8 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class PromptTemplateLoader {
 
-    private final ResourceLoader resourceLoader;
     private final Map<String, String> cache = new ConcurrentHashMap<>();
 
     /**
@@ -61,12 +56,17 @@ public class PromptTemplateLoader {
      * @throws IllegalStateException 当模板文件不存在或读取失败时抛出
      */
     private String readResource(String path) {
-        String location = path.startsWith("classpath:") ? path : "classpath:" + path;
-        Resource resource = resourceLoader.getResource(location);
-        if (!resource.exists()) {
-            throw new IllegalStateException("提示词模板路径不存在：" + path);
+        String resourcePath = path;
+        if (resourcePath.startsWith("classpath:")) {
+            resourcePath = resourcePath.substring("classpath:".length());
         }
-        try (InputStream in = resource.getInputStream()) {
+        if (resourcePath.startsWith("/")) {
+            resourcePath = resourcePath.substring(1);
+        }
+        try (InputStream in = getClass().getClassLoader().getResourceAsStream(resourcePath)) {
+            if (in == null) {
+                throw new IllegalStateException("提示词模板路径不存在：" + path);
+            }
             return new String(in.readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException e) {
             log.error("读取提示模板失败，路径：{}", path, e);

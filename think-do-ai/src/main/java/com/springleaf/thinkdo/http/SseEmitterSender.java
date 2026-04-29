@@ -111,8 +111,10 @@ public class SseEmitterSender {
      */
     private void closeWithError(Throwable throwable) {
         // 使用 CAS 原子操作，确保只关闭一次
+        // 使用 complete() 而非 completeWithError()，避免触发 Tomcat async error dispatch
+        // 导致 GlobalExceptionHandler 试图以 text/event-stream Content-Type 返回 JSON 而失败
         if (closed.compareAndSet(false, true)) {
-            emitter.completeWithError(throwable);
+            emitter.complete();
         }
     }
 }
