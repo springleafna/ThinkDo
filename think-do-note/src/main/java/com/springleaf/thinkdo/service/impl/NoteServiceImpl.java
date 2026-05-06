@@ -404,19 +404,104 @@ public class NoteServiceImpl extends ServiceImpl<NoteMapper, NoteEntity> impleme
     }
 
     /**
-     * 生成预览内容（去除HTML标签，截取前N个字符）
+     * 生成预览内容（兼容 HTML 和 Markdown 格式）
      */
     private String generatePreview(String content) {
         if (!StringUtils.hasText(content)) {
             return null;
         }
-        // 使用 Jsoup 去除 HTML 标签
-        String plainText = Jsoup.parse(content).text();
+
+        String plainText;
+
+        // 检测内容格式：HTML 或 Markdown
+        if (isHtmlContent(content)) {
+            // HTML 格式：使用 Jsoup 去除标签
+            plainText = Jsoup.parse(content).text();
+        } else {
+            // Markdown 格式：去除 Markdown 语法符号
+            plainText = stripMarkdownSyntax(content);
+        }
+
         // 截取前N个字符
         if (plainText.length() > NoteConstant.PREVIEW_MAX_LENGTH) {
             return plainText.substring(0, NoteConstant.PREVIEW_MAX_LENGTH);
         }
         return plainText;
+    }
+
+    /**
+     * 检测内容是否为 HTML 格式
+     */
+    private boolean isHtmlContent(String content) {
+        // 简单检测：以 < 开头且包含常见的 HTML 标签
+        String trimmed = content.trim();
+        if (!trimmed.startsWith("<")) {
+            return false;
+        }
+        // 检查是否包含 HTML 标签特征
+        return trimmed.matches("(?s).*<\\s*?(h[1-6]|p|div|span|a|strong|em|b|i|u|ul|ol|li|blockquote|code|pre|img)\\b.*");
+    }
+
+    /**
+     * 去除 Markdown 语法符号，提取纯文本
+     */
+    private String stripMarkdown(String markdown) {
+        if (markdown == null || markdown.isEmpty()) {
+            return markdown;
+        }
+
+        String text = markdown;
+
+        // 去除代码块（```语言 代码 ```）
+        text = text.replaceAll("(?s)```\\w*\\n[\\s\\S]*?```", "[代码块]");
+        // 去除行内代码（`代码`）
+        text = text.replaceAll("`[^`]+`", "");
+
+        // 去除标题（# 标题）- 使用 (?m) 多行模式
+        text = text.replaceAll("(?m)^#{1,6}\\s+", "");
+
+        // 去除加粗（**文本** 或 __文本__）
+        text = text.replaceAll("\\*\\*([^*]+)\\*\\*", "$1");
+        text = text.replaceAll("__([^_]+)__", "$1");
+
+        // 去除斜体（*文本* 或 _文本_）
+        text = text.replaceAll("\\*([^*]+)\\*", "$1");
+        text = text.replaceAll("_([^_]+)_", "$1");
+
+        // 去除删除线（~~文本~~）
+        text = text.replaceAll("~~([^~]+)~~", "$1");
+
+        // 去除链接（[文本](url) 或 <url>）
+        text = text.replaceAll("\\[([^\\]]+)\\]\\([^\\)]+\\)", "$1");
+        text = text.replaceAll("<([^>]+)>", "$1");
+
+        // 去除图片（![alt](url)）
+        text = text.replaceAll("!\\[[^\\]]*\\]\\([^\\)]+\\)", "[图片]");
+
+        // 去除引用（> 文本）- 使用 (?m) 多行模式
+        text = text.replaceAll("(?m)^>\\s+", "");
+
+        // 去除无序列表标记（-、*、+ 文本）- 使用 (?m) 多行模式
+        text = text.replaceAll("(?m)^[\\-*+]\\s+", "");
+
+        // 去除有序列表标记（1. 文本）- 使用 (?m) 多行模式
+        text = text.replaceAll("(?m)^\\d+\\.\\s+", "");
+
+        // 去除水平线（--- 或 ***）- 使用 (?m) 多行模式
+        text = text.replaceAll("(?m)^[-*]{3,}\\s*$", "");
+
+        // 清理多余空行和空格
+        text = text.replaceAll("\\n{3,}", "\n\n");
+        text = text.trim();
+
+        return text;
+    }
+
+    /**
+     * 去除 Markdown 语法符号（兼容方法名）
+     */
+    private String stripMarkdownSyntax(String markdown) {
+        return stripMarkdown(markdown);
     }
 
     @Override
