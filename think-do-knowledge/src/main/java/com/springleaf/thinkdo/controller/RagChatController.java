@@ -7,6 +7,7 @@ import com.springleaf.thinkdo.domain.response.MessageInfoResp;
 import com.springleaf.thinkdo.service.ConversationService;
 import com.springleaf.thinkdo.service.MessageService;
 import com.springleaf.thinkdo.service.RagChatService;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -32,7 +33,9 @@ public class RagChatController {
     @GetMapping(value = "/rag", produces = "text/event-stream;charset=UTF-8")
     public SseEmitter chat(@RequestParam String question,
                            @RequestParam(required = false) String conversationId,
-                           @RequestParam(required = false, defaultValue = "false") Boolean deepThinking) {
+                           @RequestParam(required = false, defaultValue = "false") Boolean deepThinking,
+                           HttpServletResponse response) {
+        response.setHeader("X-Accel-Buffering", "no");
         SseEmitter emitter = new SseEmitter(0L);
         ragChatService.streamChat(question, conversationId, deepThinking, emitter);
         return emitter;
