@@ -193,6 +193,14 @@ public class KnowledgeDocumentServiceImpl implements KnowledgeDocumentService {
             throw new BusinessException("文档不存在");
         }
 
+        // 删除向量库中该文档的所有 chunk
+        String kbId = String.valueOf(documentEntity.getKbId());
+        vectorStoreService.deleteDocumentVectors(kbId, docId);
+
+        // 删除数据库中的分块记录
+        knowledgeChunkService.deleteByDocId(docId);
+
+        // 逻辑删除文档
         documentEntity.setDeleted(1);
         documentEntity.setUpdatedBy(StpUtil.getLoginIdAsLong());
         docMapper.deleteById(documentEntity);
