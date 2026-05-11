@@ -37,18 +37,25 @@ java -jar think-do-mcp/target/think-do-mcp-1.0-SNAPSHOT.jar
 
 ```
 think-do-start (启动器，聚合所有业务模块)
-├── think-do-framework (中间件配置：Sa-Token, MyBatisPlus, Redis)
-│   └── think-do-common (通用工具：Result, Exception, 枚举, 配置)
+├── think-do-common (通用工具：Result, Exception, 枚举, 配置)
 ├── think-do-system (用户、权限、认证)
-│   └── think-do-framework
+│   └── think-do-common
 ├── think-do-ai (LLM 对话、模型路由、SSE 流式输出、MCP 客户端)
 │   └── think-do-system
 ├── think-do-knowledge (知识库、文档管理、RAG 检索、向量存储、意图节点)
 │   ├── think-do-ai
 │   └── think-do-system
 ├── think-do-note (笔记 CRUD、AI 润色/扩写/纠错)
+│   ├── think-do-ai
 │   └── think-do-system
-└── think-do-plan (计划、步骤、每日清单、便签)
+├── think-do-plan (计划、步骤、每日清单、便签)
+│   ├── think-do-ai
+│   └── think-do-system
+└── think-do-admin (管理员后台：用户管理、会话管理、知识库管理、数据看板)
+    ├── think-do-knowledge
+    ├── think-do-note
+    ├── think-do-plan
+    ├── think-do-ai
     └── think-do-system
 
 think-do-mcp (独立 MCP Server 应用，端口 9099)

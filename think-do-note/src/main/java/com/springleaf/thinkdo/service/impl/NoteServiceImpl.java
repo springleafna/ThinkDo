@@ -353,8 +353,16 @@ public class NoteServiceImpl extends ServiceImpl<NoteMapper, NoteEntity> impleme
                 "text", req.getText(),
                 "tone", tone,
                 "length", length,
-                "language", language
+                "language", mapLanguageName(language)
         );
+    }
+
+    private static final Map<String, String> LANGUAGE_NAMES = Map.of(
+            "zh", "中文", "en", "英文"
+    );
+
+    private String mapLanguageName(String code) {
+        return LANGUAGE_NAMES.getOrDefault(code, "中文");
     }
 
     /**
